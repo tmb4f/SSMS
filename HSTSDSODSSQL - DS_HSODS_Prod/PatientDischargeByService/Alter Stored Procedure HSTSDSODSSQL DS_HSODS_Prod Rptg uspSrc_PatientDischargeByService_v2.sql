@@ -73,6 +73,7 @@ MODS:
 					  patient class, patient status, admit confirmation status, acuity,
 					  progression level, and discharge order time
 		08/16/2017 - remove encounters with only a discharge ADT event
+		02/19/2019 - add joins to view Rptg.vwFact_Pt_Enc_Atn_Prov_All
 *******************************************************************************************/
 
 
@@ -148,10 +149,10 @@ SELECT distinct hclrt.PAT_ENC_CSN_ID
 	  ,ddisp.sk_Dim_Clrt_Disch_Disp
 	  ,ddisp.DISCH_DISP_C
 	  ,ddisp.Clrt_Disch_Disp
-	  ,CAST(NULL AS INT) AS dsch_atn_prov_sk_ser
-	  ,CAST(NULL AS INT) AS dsch_atn_prov_sk_physcn
-	  ,CAST(NULL AS INT) AS adm_atn_prov_sk_ser
-	  ,CAST(NULL AS INT) AS adm_atn_prov_sk_physcn
+      ,dschatn.sk_Dim_Clrt_SERsrc AS dsch_atn_prov_sk_ser
+      ,dschatn.sk_Dim_Physcn AS dsch_atn_prov_sk_physcn
+      ,admatn.sk_Dim_Clrt_SERsrc AS adm_atn_prov_sk_ser
+	  ,admatn.sk_Dim_Physcn AS adm_atn_prov_sk_physcn
 	  ,CAST(NULL AS SMALLINT) AS ACUITY_LEVEL_C
 	  ,CAST(NULL AS VARCHAR(254)) AS Acuity
 	  ,acuity.Msr_Val AS Progression_Level
@@ -169,6 +170,22 @@ SELECT distinct hclrt.PAT_ENC_CSN_ID
   LEFT OUTER JOIN Rptg.vwDim_Clrt_Admt_Chrcstc AS admt
   ON admt.sk_Dim_Clrt_Admt_Chrcstc = hclrt.sk_Dim_Clrt_Admt_Chrcstc
   LEFT OUTER JOIN dbo.Dim_Clrt_Disch_Disp AS ddisp ON ddisp.sk_Dim_Clrt_Disch_Disp = hclrt.sk_Dim_Clrt_Disch_Disp
+  LEFT OUTER JOIN (SELECT PAT_ENC_CSN_ID
+                        , sk_Dim_Clrt_SERsrc
+						, sk_Dim_Physcn
+						, ROW_NUMBER() OVER (PARTITION BY sk_Fact_Pt_Enc_Clrt ORDER BY Atn_Beg_Dtm DESC, CASE
+																										   WHEN Atn_End_Dtm = '1900-01-01' THEN GETDATE()
+																										   ELSE Atn_End_Dtm
+																									     END DESC) AS 'Atn_Seq'
+				   FROM Rptg.vwFact_Pt_Enc_Atn_Prov_All) AS dschatn ON (dschatn.PAT_ENC_CSN_ID = clrt.PAT_ENC_CSN_ID) AND dschatn.Atn_Seq = 1
+  LEFT OUTER JOIN (SELECT PAT_ENC_CSN_ID
+                        , sk_Dim_Clrt_SERsrc
+						, sk_Dim_Physcn
+						, ROW_NUMBER() OVER (PARTITION BY sk_Fact_Pt_Enc_Clrt ORDER BY Atn_Beg_Dtm, CASE
+																									  WHEN Atn_End_Dtm = '1900-01-01' THEN GETDATE()
+																									  ELSE Atn_End_Dtm
+																									END) AS 'Atn_Seq'
+				   FROM Rptg.vwFact_Pt_Enc_Atn_Prov_All) AS admatn ON (admatn.PAT_ENC_CSN_ID = clrt.PAT_ENC_CSN_ID) AND admatn.Atn_Seq = 1
   LEFT OUTER JOIN (SELECT sk_Fact_Pt_Enc_Clrt
                         , sk_Ordr_Dte
 						, Ordr_Dtm
@@ -531,14 +548,14 @@ SELECT Rpt.*
 	   ,dsch.dsch_enc_physician_service AS dsch_enc_physcn_Service_Line
 	   ,ip.adm_atn_prov_sk_ser
 	   ,ip.dsch_atn_prov_sk_ser
-	   ,CAST(NULL AS VARCHAR(18)) AS adm_atn_prov_provider_id
-	   ,CAST(NULL AS VARCHAR(18)) AS dsch_atn_prov_provider_id
-	   ,CAST(NULL AS VARCHAR(200)) AS adm_atn_prov_provider_name
-	   ,CAST(NULL AS VARCHAR(200)) AS dsch_atn_prov_provider_name
+	   ,adm_atn_prov_ser.PROV_ID AS adm_atn_prov_provider_id
+	   ,dsch_atn_prov_ser.PROV_ID AS dsch_atn_prov_provider_id
+	   ,adm_atn_prov_ser.Prov_Nme AS adm_atn_prov_provider_name
+	   ,dsch_atn_prov_ser.Prov_Nme AS dsch_atn_prov_provider_name
 	   ,ip.adm_atn_prov_sk_physcn
 	   ,ip.dsch_atn_prov_sk_physcn
-	   ,CAST(NULL AS VARCHAR(150)) AS adm_atn_prov_physcn_Service_Line
-	   ,CAST(NULL AS VARCHAR(150)) AS dsch_atn_prov_physcn_Service_Line
+	   ,adm_atn_prov_physcn.Service_Line AS adm_atn_prov_physcn_Service_Line
+	   ,dsch_atn_prov_physcn.Service_Line AS dsch_atn_prov_physcn_Service_Line
 	   ,ip.adt_pt_cls
 	   ,ip.ADMIT_CONF_STAT
 	   ,ip.ADT_PATIENT_STAT
@@ -561,6 +578,16 @@ SELECT Rpt.*
   ON (dpt.sk_Dim_Clrt_Pt = ip.sk_Dim_Clrt_Pt)
   LEFT OUTER JOIN rptg.vwDim_Clrt_SERsrc AS adm_enc_ser WITH(NOLOCK) ON adm_enc_ser.sk_Dim_Clrt_SERsrc = ip.adm_enc_sk_ser
   LEFT OUTER JOIN rptg.vwDim_Clrt_SERsrc AS dsch_enc_ser WITH(NOLOCK) ON dsch_enc_ser.sk_Dim_Clrt_SERsrc = ip.dsch_enc_sk_ser
+  LEFT OUTER JOIN rptg.vwDim_Clrt_SERsrc AS adm_atn_prov_ser WITH(NOLOCK) ON adm_atn_prov_ser.sk_Dim_Clrt_SERsrc = ip.adm_atn_prov_sk_ser
+  LEFT OUTER JOIN rptg.vwDim_Clrt_SERsrc AS dsch_atn_prov_ser WITH(NOLOCK) ON dsch_atn_prov_ser.sk_Dim_Clrt_SERsrc = ip.dsch_atn_prov_sk_ser
+  LEFT OUTER JOIN (SELECT sk_Dim_Physcn, Service_Line
+                   FROM [Rptg].[vwDim_Physcn]
+				   WHERE current_flag = 1) AS adm_atn_prov_physcn
+  ON ip.adm_atn_prov_sk_physcn = adm_atn_prov_physcn.sk_Dim_Physcn
+  LEFT OUTER JOIN (SELECT sk_Dim_Physcn, Service_Line
+                   FROM [Rptg].[vwDim_Physcn]
+				   WHERE current_flag = 1) AS dsch_atn_prov_physcn
+  ON ip.dsch_atn_prov_sk_physcn = dsch_atn_prov_physcn.sk_Dim_Physcn
   WHERE ((adm.sk_Fact_Pt_Enc_Clrt IS NOT NULL) OR (dsch.sk_Fact_Pt_Enc_Clrt IS NOT NULL))
 ) Rpt
 
