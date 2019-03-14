@@ -626,7 +626,10 @@ IF @Manual IS NULL
 		--Truncate Table DS_HSDM_Prod. Rptg.ACO_DEP_52WK		   
 		--Insert Into DS_HSDM_Prod.Rptg.ACO_DEP_52WK
 		SELECT * FROM #RptgTemp
-		ORDER BY sk_Fact_Pt_Enc_Clrt
+		--ORDER BY sk_Fact_Pt_Enc_Clrt
+		ORDER BY ADT_PATIENT_STAT
+		       , adt_pt_cls
+			   , sk_Adm_Dte
 	END 
 ELSE
 	SELECT * FROM #RptgTemp
