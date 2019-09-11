@@ -14,7 +14,7 @@ SET QUOTED_IDENTIFIER ON
 GO
 SET ANSI_NULLS ON 
 GO
-
+/*
 SELECT clrt.ADm_Dt AS Adm_Dt
       ,clrt.Atn_Dr AS Atn_Dr_Prov_Id
 	  ,clrt.Atnd_Dr_SMS_ID AS Atn_Dr_SMS_Id
@@ -79,7 +79,7 @@ LEFT OUTER JOIN (SELECT sk_Dim_Physcn, LastName, FirstName, MI, NPINumber
 				 WHERE current_flag = 1
 				 AND ((NPINumber IS NOT NULL) AND (NPINumber <> 'Unknown') AND (CAST(NPINumber AS INTEGER) > 0))) dphyscn2
 ON dphyscn2.NPINumber = CAST(ser.NPI AS VARCHAR(10))
-WHERE dpt.sk_Dim_Pt = 389459
+--WHERE dpt.sk_Dim_Pt = 389459
 ORDER BY Adm_Dt
 
 SELECT edw.[Adm_Dt]
@@ -128,9 +128,9 @@ SELECT edw.[Adm_Dt]
 	               AND cso.sk_Dim_Physcn > 0--exclude placeholders
                    WHERE cso.current_flag = 1) physcn--only latest
   ON physcn.sk_Dim_Physcn = edw.sk_Dim_Physcn
-WHERE edw.sk_Dim_Pt = 389459
+--WHERE edw.sk_Dim_Pt = 389459
 ORDER BY Adm_Dt
-
+*/
 --CREATE VIEW [HSDO].[vwGPP_Encounters_New]
 ----ALTER VIEW [HSDO].[vwGPP_Encounters_New]
 --AS
@@ -249,7 +249,7 @@ LEFT OUTER JOIN (SELECT sk_Dim_Physcn, LastName, FirstName, MI, NPINumber
 				 WHERE current_flag = 1
 				 AND ((NPINumber IS NOT NULL) AND (NPINumber <> 'Unknown') AND (CAST(NPINumber AS INTEGER) > 0))) dphyscn2
 ON dphyscn2.NPINumber = CAST(ser.NPI AS VARCHAR(10))
-WHERE dpt.sk_Dim_Pt = 389459
+--WHERE dpt.sk_Dim_Pt = 389459
 UNION ALL
 SELECT edw.[Adm_Dt]
       ,CAST(physcn.PROV_ID AS VARCHAR(30)) AS Atn_Dr_Prov_Id
@@ -297,13 +297,14 @@ SELECT edw.[Adm_Dt]
 	               AND cso.sk_Dim_Physcn > 0--exclude placeholders
                    WHERE cso.current_flag = 1) physcn--only latest
   ON physcn.sk_Dim_Physcn = edw.sk_Dim_Physcn
-  WHERE edw.sk_Dim_Pt = 389459
+  --WHERE edw.sk_Dim_Pt = 389459
 ) gpp
 ) seq
 ) rptg
 --WHERE rptg.Seq_Num = 1
 
-ORDER BY rptg.Seq_Num, rptg.Adm_Dt
+--ORDER BY rptg.Seq_Num, rptg.Adm_Dt
+ORDER BY rptg.sk_Dim_Pt, rptg.Seq_Num, rptg.Adm_Dt
 GO
 
 -- ================================================================

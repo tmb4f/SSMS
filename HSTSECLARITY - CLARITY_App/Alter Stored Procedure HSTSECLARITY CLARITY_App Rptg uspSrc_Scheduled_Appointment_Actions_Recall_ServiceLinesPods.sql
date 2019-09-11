@@ -1,4 +1,4 @@
-USE [CLARITY_App_Dev]
+USE [CLARITY_App]
 GO
 
 SET ANSI_NULLS ON
@@ -7,39 +7,18 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-DECLARE @StartDate SMALLDATETIME,
-        @EndDate SMALLDATETIME,
+ALTER PROCEDURE [Rptg].[uspSrc_Scheduled_Appointment_Actions_Recall_ServiceLinesPods]
+       (
+        @StartDate SMALLDATETIME = NULL,
+        @EndDate SMALLDATETIME = NULL,
 		@DepartmentGrouperColumn VARCHAR(12),
 		@DepartmentGrouperNoValue VARCHAR(25)
-
-SET @StartDate = NULL
-SET @EndDate = NULL
---SET @StartDate = '2/1/2019 00:00 AM'
---SET @StartDate = '2/28/2019 00:00 AM'
---SET @StartDate = '1/1/2017 00:00 AM'
---SET @EndDate = '1/1/2031 00:00 AM'
---SET @StartDate = '4/24/2019 00:00 AM'
---SET @EndDate = '5/23/2019 11:59 PM'
-
---SET @DepartmentGrouperColumn = 'service_line'
---SET @DepartmentGrouperColumn = 'pod_name'
-SET @DepartmentGrouperColumn = 'PFA_POD'
-
---SET @DepartmentGrouperNoValue = '(No Service Line Defined)'
-SET @DepartmentGrouperNoValue = '(No Pod Defined)'
-
---ALTER PROCEDURE [Rptg].[uspSrc_Scheduled_Appointment_Actions_Recall_ServiceLinesPods]
---       (
---        @StartDate SMALLDATETIME = NULL,
---        @EndDate SMALLDATETIME = NULL,
---		@DepartmentGrouperColumn VARCHAR(12),
---		@DepartmentGrouperNoValue VARCHAR(25)
---	   )
---AS
+	   )
+AS
 /****************************************************************************************************************************************
 WHAT: Create procedure Rptg.uspSrc_Scheduled_Appointment_Actions_Recall_ServiceLinesPods
 WHO : Tom Burgan
-WHEN: 06/21/2019
+WHEN: 06/19/2019
 WHY : Recall appointment action service lines/pods
 ----------------------------------------------------------------------------------------------------------------------------------------
 INFO:
@@ -48,10 +27,10 @@ INFO:
 				CLARITY_App.Rptg.vwRef_MDM_Location_Master_EpicSvc
 
       OUTPUTS:
-                CLARITY_App_Dev.Rptg.uspSrc_Scheduled_Appointment_Actions_Recall_ServiceLinesPods
+                CLARITY_App.Rptg.uspSrc_Scheduled_Appointment_Actions_Recall_ServiceLinesPods
 ----------------------------------------------------------------------------------------------------------------------------------------
-MODS:     06/21/2019--TMB-- Create new stored procedure
-		  07/08/2019--TMB-- Edit logic for grouper column
+MODS:     06/19/2019--TMB-- Create new stored procedure
+		  07/31/2019--TMB-- Edit logic for grouper column
 *****************************************************************************************************************************************/
 
   SET NOCOUNT ON;
@@ -79,11 +58,13 @@ MODS:     06/21/2019--TMB-- Create new stored procedure
       END;
 ----------------------------------------------------
 
-  IF 1 = 2
+  DECLARE @FMTONLY BIT;
+
+  IF 1 = 0
      BEGIN
-       SELECT CAST(0 AS INTEGER) AS Sort, 
-              CAST('' AS VARCHAR(100)) AS [NAME]
-     END;
+       SET @FMTONLY = 1;
+	   SET FMTONLY OFF;
+     END
 
 DECLARE @locstartdate SMALLDATETIME,
         @locenddate SMALLDATETIME
@@ -120,8 +101,6 @@ FROM
 WHERE (evnts.RECALL_DT >= @RecallStartDate
 AND evnts.RECALL_DT <= @RecallEndDate) AND evnts.' + @DepartmentGrouperColumn + ' IS NOT NULL UNION ALL SELECT 2, ''' + @DepartmentGrouperNoValue + ''' ORDER BY 1,2';
 
-PRINT @SelectString
-
 -- Build the parameter definition clause.
 
 SET @ParmDefinition = N'@RecallStartDate SMALLDATETIME, @RecallEndDate SMALLDATETIME';
@@ -129,6 +108,11 @@ SET @ParmDefinition = N'@RecallStartDate SMALLDATETIME, @RecallEndDate SMALLDATE
 -- Execute dynamically built SQL statement.
 
 EXECUTE sp_executesql @SelectString, @ParmDefinition, @RecallStartDate=@locstartdate, @RecallEndDate=@locenddate;
+
+  IF @FMTONLY = 1
+     BEGIN
+       SET FMTONLY ON;
+     END
 
 GO
 

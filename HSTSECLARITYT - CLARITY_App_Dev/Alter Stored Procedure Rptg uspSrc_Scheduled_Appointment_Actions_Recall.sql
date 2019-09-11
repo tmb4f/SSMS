@@ -7,36 +7,16 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-DECLARE @StartDate SMALLDATETIME,
-        @EndDate SMALLDATETIME,
+ALTER PROCEDURE [Rptg].[uspSrc_Scheduled_Appointment_Actions_Recall]
+       (
+        @StartDate SMALLDATETIME = NULL,
+        @EndDate SMALLDATETIME = NULL,
 		@DepartmentGrouperColumn VARCHAR(12),
 		@DepartmentGrouperNoValue VARCHAR(25),
-		--@InsertIntoString NVARCHAR(1000),
-		--@SelectString NVARCHAR(4000),
-		--@ParmDefinition NVARCHAR(500),
         @in_pods_servLine VARCHAR(MAX),
         @in_depid VARCHAR(MAX)
-
-SET @StartDate = '1/1/2017 00:00 AM'
-SET @EndDate = '1/1/2031 00:00 AM'
-
---SET @DepartmentGrouperColumn = 'service_line'
---SET @DepartmentGrouperColumn = 'pod_name'
-SET @DepartmentGrouperColumn = 'PFA_POD'
-
---SET @DepartmentGrouperNoValue = '(No Service Line Defined)'
-SET @DepartmentGrouperNoValue = '(No Pod Defined)'
-
---ALTER PROCEDURE [Rptg].[uspSrc_Scheduled_Appointment_Actions_Recall]
---       (
---        @StartDate SMALLDATETIME = NULL,
---        @EndDate SMALLDATETIME = NULL,
---		@DepartmentGrouperColumn VARCHAR(12),
---		@DepartmentGrouperNoValue VARCHAR(25),
---        @in_pods_servLine VARCHAR(MAX),
---        @in_depid VARCHAR(MAX)
---	   )
---AS
+	   )
+AS
 /****************************************************************************************************************************************
 WHAT: Create procedure Rptg.uspSrc_Scheduled_Appointment_Actions_Recall
 WHO : Tom Burgan
@@ -84,107 +64,8 @@ DECLARE @locstartdate SMALLDATETIME,
 SET @locstartdate = @StartDate
 SET @locenddate   = @EndDate
 
-DECLARE @ServiceLine TABLE (ServiceLineName VARCHAR(150))
-
-INSERT INTO @ServiceLine
-(
-    ServiceLineName
-)
-VALUES
---('(No Service Line Defined)'),
---('Digestive Health'),
---('Heart and Vascular'),
---('Medical Subspecialties'),
---('Musculoskeletal'),
---('Neurosciences and Behavioral Health'),
---('Oncology'),
---('Ophthalmology'),
---('Primary Care'),
---('Surgical Subspecialties'),
---('Transplant'),
---('Womens and Childrens')
---('(No Service Line Defined)')
---('Medical Subspecialties')
---('Digestive Health')
---('Womens and Childrens')
---('Ophthalmology')
-('Primary Care')
-;
-
-SELECT @in_pods_servLine = COALESCE(@in_pods_servLine+',' ,'') + CAST(ServiceLineName AS VARCHAR(MAX))
-FROM @ServiceLine
-
---SELECT @in_pods_servLine
-
-DECLARE @Pod TABLE (PodName VARCHAR(100))
-
-INSERT INTO @Pod
-(
-    PodName
-)
-VALUES
---('(No Pod Defined)'),
---('Cancer'),
---('Musculoskeletal'),
---('Primary Care'),
---('Surgical Procedural Specialties'),
---('Transplant'),
---('Medical Specialties'),
---('Radiology'),
---('Heart and Vascular Center'),
---('Neurosciences and Psychiatry'),
---('Women''s and Children''s'),
---('CPG'),
---('UVA Community Cancer POD'),
---('Digestive Health'),
---('Ophthalmology'),
---('Community Medicine')
---('Medical Specialties')
---('Digestive Health')
-('Primary Care')
-;
-
---SELECT @in_pods_servLine = COALESCE(@in_pods_servLine+',' ,'') + CAST(PodName AS VARCHAR(MAX))
---FROM @Pod
-
---SELECT @in_pods_servLine
-
-IF OBJECT_ID('tempdb..#RecallDepartment') IS NOT NULL DROP TABLE tempdb..#RecallDepartment
-
-CREATE TABLE #RecallDepartment (DepartmentId NUMERIC(18,0))
-
-DECLARE @InsertIntoString NVARCHAR(1000),
+DECLARE @SelectString NVARCHAR(4000),
 		@ParmDefinition NVARCHAR(500)
-
-SET @InsertIntoString = N';WITH cte_pods_servLine (pod_Service_Line) AS (SELECT Param FROM CLARITY_App_Dev.Rptg.fn_ParmParse(@PodServiceLine, '','')) INSERT INTO #RecallDepartment SELECT DISTINCT mdm.epic_department_id AS DepartmentId FROM CLARITY.[dbo].[CL_SSA] ssa INNER JOIN CLARITY.[dbo].[CL_SSA_PROV_DEPT] pd ON ssa.ACTION_ID = pd.ACTION_ID LEFT OUTER JOIN CLARITY.dbo.CLARITY_DEP dep ON dep.DEPARTMENT_ID = pd.DEP_ID LEFT OUTER JOIN CLARITY_App.Rptg.vwRef_MDM_Location_Master_EpicSvc mdm ON pd.DEP_ID = mdm.epic_department_id WHERE 1=1 AND mdm.epic_department_id IS NOT NULL AND (ssa.RECALL_DT >= @RecallStartDate AND ssa.RECALL_DT <= @RecallEndDate) AND COALESCE(mdm.' + @DepartmentGrouperColumn + ',''' + @DepartmentGrouperNoValue + ''') IN (SELECT pod_Service_Line FROM cte_pods_servLine) ORDER BY DepartmentId';
-SET @ParmDefinition = N'@RecallStartDate SMALLDATETIME, @RecallEndDate SMALLDATETIME, @PodServiceLine VARCHAR(MAX)';
-EXECUTE sp_executesql @InsertIntoString, @ParmDefinition, @RecallStartDate=@locstartdate, @RecallEndDate=@locenddate, @PodServiceLine=@in_pods_servLine;
-
-DECLARE @Department TABLE (DepartmentId NUMERIC(18,0))
-
-INSERT INTO @Department
-(
-    DepartmentId
-)
-SELECT DepartmentId
-FROM #RecallDepartment
-;
-
-SELECT @in_depid = COALESCE(@in_depid+',' ,'') + CAST(DepartmentId AS VARCHAR(MAX))
-FROM @Department
-
---SELECT @in_depid
-
---DECLARE @locstartdate SMALLDATETIME,
---        @locenddate SMALLDATETIME
-
---SET @locstartdate = @StartDate
---SET @locenddate   = @EndDate
-
---DECLARE @SelectString NVARCHAR(4000),
---		@ParmDefinition NVARCHAR(500)
-
-DECLARE @SelectString NVARCHAR(4000)
 
 SET @SelectString = N';WITH cte_pods_servLine (pod_Service_Line)
 AS
@@ -293,9 +174,6 @@ FROM
 WHERE (evnts.RECALL_DT >= @RecallStartDate
 AND evnts.RECALL_DT <= @RecallEndDate) AND (COALESCE(evnts.' + @DepartmentGrouperColumn + ',''' + @DepartmentGrouperNoValue + ''') IN (SELECT pod_Service_Line FROM cte_pods_servLine)) AND (evnts.DEP_ID IN (SELECT DepartmentId FROM cte_depid))
 ORDER BY evnts.RECALL_DT';
-
-PRINT @SelectString
-
 SET @ParmDefinition = N'@RecallStartDate SMALLDATETIME, @RecallEndDate SMALLDATETIME, @PodServiceLine VARCHAR(MAX), @DepartmentId VARCHAR(MAX)';
 EXECUTE sp_executesql @SelectString, @ParmDefinition, @RecallStartDate=@locstartdate, @RecallEndDate=@locenddate, @PodServiceLine=@in_pods_servLine, @DepartmentId=@in_depid;
 
