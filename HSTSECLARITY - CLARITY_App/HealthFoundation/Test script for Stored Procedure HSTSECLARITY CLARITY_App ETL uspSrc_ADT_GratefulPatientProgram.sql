@@ -7,6 +7,20 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+/*SELECT ti.SUMMARY_BLOCK_ID
+	 , id.PAT_ID  AS TXP_DNR_ID
+	 , SUBSTRING(id.IDENTITY_ID,1,50) AS DONOR_UNOS_ID
+	 , 'Living' AS TXP_DNR_STATUS
+FROM CLARITY.dbo.IDENTITY_ID AS id
+
+INNER JOIN CLARITY.dbo.IDENTITY_ID_TYPE AS idt
+  ON id.IDENTITY_TYPE_ID = idt.ID_TYPE
+
+INNER JOIN CLARITY.dbo.TRANSPLANT_INFO AS ti
+  ON ti.PAT_ID = id.PAT_ID
+
+WHERE id.IDENTITY_TYPE_ID  = 195; --UNOS ID*/
+
 -- =============================================
 
 /*******************************************************************************************
@@ -72,7 +86,7 @@ OUTPUTS:
 	-- Add the parameters for the stored procedure here
 	--@StartDate DATETIME, --DATEADD(yy,-5,DATEADD(yy, DATEDIFF(yy,0,getdate()), 0)), 
 	--@EndDate DATETIME --= GETDATE()
-AS
+--AS
 
 	-- SET NOCOUNT ON added to prevent extra result sets from
 	-- interfering with SELECT statements.
@@ -141,15 +155,40 @@ CREATE TABLE Clarity_App_Dev.dbo.ADT_GPP_Encounters
 		
 			)
 */
+
+IF OBJECT_ID('tempdb..#GPP ') IS NOT NULL
+DROP TABLE #GPP
+
 /*******QUERY TO GET LAST ENCOUNTER*********************/
 ;WITH Lenc_cte AS 
 (
 SELECT 
 	hsp.PAT_ID 'Pat_ID'
 	,hsp.VISIT_PROV_ID 'Prov_ID'
+	--,MAX(tid.DONOR_UNOS_ID) 'DONOR_UNOS_ID'
+	--,MAX(tid.TXP_DNR_STATUS) 'TXP_DNR_STATUS'
 	,MAX(hsp.PAT_ENC_DATE_REAL) 'Cntc_Dt'
-FROM  CLARITY.dbo.PAT_ENC hsp		--ON hsp.PAT_ENC_CSN_ID = enc.PAT_ENC_CSN_ID
 
+FROM  CLARITY.dbo.PAT_ENC hsp		--ON hsp.PAT_ENC_CSN_ID = enc.PAT_ENC_CSN_ID
+LEFT OUTER JOIN CLARITY.dbo.PATIENT patient
+ON patient.PAT_ID = hsp.PAT_ID
+--LEFT OUTER JOIN
+--(
+--SELECT ti.SUMMARY_BLOCK_ID
+--	 , id.PAT_ID  AS TXP_DNR_ID
+--	 , SUBSTRING(id.IDENTITY_ID,1,50) AS DONOR_UNOS_ID
+--	 , 'Living' AS TXP_DNR_STATUS
+--FROM CLARITY.dbo.IDENTITY_ID AS id
+
+--INNER JOIN CLARITY.dbo.IDENTITY_ID_TYPE AS idt
+--  ON id.IDENTITY_TYPE_ID = idt.ID_TYPE
+
+--INNER JOIN CLARITY.dbo.TRANSPLANT_INFO AS ti
+--  ON ti.PAT_ID = id.PAT_ID
+
+--WHERE id.IDENTITY_TYPE_ID  = 195 --UNOS ID
+--) tid
+--ON tid.TXP_DNR_ID = hsp.PAT_ID
 WHERE 
 (hsp.CONTACT_DATE >=@StartDate		AND		hsp.CONTACT_DATE<@EndDate)
 				OR 
@@ -164,7 +203,9 @@ GROUP BY hsp.PAT_ID,hsp.VISIT_PROV_ID
 
 ,lst_cte AS 
 (
-SELECT 
+SELECT
+  --   Lenc_cte.DONOR_UNOS_ID,
+	 --Lenc_cte.TXP_DNR_STATUS,
 	 enc.PAT_ID, 
 	 enc.PAT_ENC_CSN_ID 'last_encounter'
 	 ,enc.HSP_ACCOUNT_ID 'Hsp_Acct'
@@ -184,7 +225,6 @@ FROM Lenc_cte
 WHERE enc.APPT_STATUS_C IN ('2','6') --ONLY COMPLETED/ARRIVED STATUS 
 )
 /************************************************************/
-
 
 
 --INSERT INTO [Clarity_App_Dev].[dbo].[ADT_GPP_Encounters]
@@ -302,8 +342,10 @@ SELECT DISTINCT  --without distinct, results multiple rows becasue diagnosis cod
 	,CAST(pt.EMAIL_ADDRESS AS VARCHAR(30)) 'Email'
 	,CAST(pt.PAT_ID AS VARCHAR(20)) 'PAT_ID'
 	,GETDATE() 'Load_Date_Time'
+	--,lst_cte.DONOR_UNOS_ID
+	--,lst_cte.TXP_DNR_STATUS
 
-
+INTO #GPP
 
 FROM CLARITY.dbo.CLARITY_SER ser
 			INNER JOIN lst_cte								ON lst_cte.Prov_ID = ser.PROV_ID
@@ -385,14 +427,43 @@ WHERE ser.PROV_TYPE <>'Resource'
 			
 				AND rd.Acc_ID IS NULL --not in red folder extract
 			
+SELECT DISTINCT
+    gpp.PAT_ID
+   ,Pt_LName
+   ,Pt_FName_MI
+   ,GUAR_FName
+   ,GUAR_MName
+   ,GUAR_LName
+   --,Adm_Dt
+   --,DONOR_UNOS_ID
+   --,TXP_DNR_STATUS
+   --,txp.*
+   --,stag.TITLE AS stag_TITLE
+   --,stat.TITLE AS stat_TITLE
+   --,org.*
+   --,stat.TITLE
+FROM #GPP gpp
+--INNER JOIN CLARITY.dbo.TRANSPLANT_INFO txp
+--ON txp.PAT_ID = gpp.PAT_ID
+--INNER JOIN CLARITY.dbo.ORGAN org
+--ON gpp.PAT_ID = org.TX_DNR_ID
+--LEFT OUTER JOIN CLARITY.dbo.ZC_TX_CURRENT_STAG stag
+--ON stag.TX_CURRENT_STAG_C = txp.TX_CURRENT_STAGE_C
+--LEFT OUTER JOIN CLARITY.dbo.ZC_TX_STAT_OUT stat
+--ON stat.TX_STAT_OUT_C = txp.TX_CURRENT_STATUS_C
+--LEFT OUTER JOIN CLARITY.dbo.ZC_ORG_STAT stat
+--ON stat.ORG_STAT_C = org. ORG_STAT_C
+--WHERE Pt_LName LIKE '%LIVER%'
+--OR Pt_LName LIKE '%DONOR%'
+--OR GUAR_LName LIKE '%Donor%'
+WHERE GUAR_LName LIKE '%Donor%'
 
-ORDER BY	CAST(ser.PROV_ID AS VARCHAR(30))
-		--	,CAST(idx.IDENTITY_ID AS VARCHAR(12))   DESC
+--ORDER BY	Pt_LName
+--ORDER BY	GUAR_FName
+--ORDER BY	gpp.PAT_ID
+--          , gpp.Adm_Dt
+ORDER BY	gpp.PAT_ID
 /****************************************************************************************/
-
-
-
-
 
 GO
 
