@@ -16,8 +16,8 @@ DROP TABLE #gpp
 			--SET  @StartDate= DATEADD(yy,-5,DATEADD(yy, DATEDIFF(yy,0,getdate()), 0)); --last five years
 			--SET  @EndDate	=CONVERT(DATETIME,CONVERT(VARCHAR(10),DATEADD(dd,-1,GETDATE()),101) + ' 23:59:59'); --Yesterday
 
-			SET  @StartDate= '3/1/2019 00:00:00';
-			SET  @EndDate	='4/30/2019 23:59:59';
+			SET  @StartDate= '7/1/2020 00:00:00';
+			SET  @EndDate	='5/6/2021 23:59:59';
 /*******QUERY TO GET LAST ENCOUNTER*********************/
 /*
 ;WITH Lenc_cte AS 
@@ -53,8 +53,8 @@ WHERE
 				OR 
 				(hsp.HOSP_ADMSN_TIME  >=@StartDate	AND		hsp.HOSP_ADMSN_TIME <@EndDate)
 )
-AND
-(hsp.PAT_ID = 'Z2153030')
+--AND
+--(hsp.PAT_ID = 'Z2153030')
 )
 /**********************************************/
 
@@ -101,6 +101,7 @@ SELECT
 FROM enc_cte
 	INNER JOIN CLARITY.dbo.PAT_ENC enc		ON enc.PAT_ID = enc_cte.Pat_ID
 	                                    AND enc.PAT_ENC_CSN_ID = enc_cte.PAT_ENC_CSN_ID
+	WHERE enc.VISIT_PROV_ID IN ('109152','72660')
 
 )
 /************************************************************/
@@ -374,10 +375,10 @@ WHERE ser.PROV_TYPE <>'Resource'
 SELECT *
 FROM #gpp
 
---ORDER BY 	Atn_Dr_LName, Atn_Dr_FName, Adm_Dt
+ORDER BY 	Atn_Dr_LName, Atn_Dr_FName, Adm_Dt
 --ORDER BY 	Atn_Dr_LName, Atn_Dr_FName
 --ORDER BY 	Adm_Dt
-ORDER BY 	PAT_ID, Adm_Dt
+--ORDER BY 	PAT_ID, Adm_Dt
 /****************************************************************************************/
 
 

@@ -17,8 +17,10 @@ DECLARE @StartDate SMALLDATETIME,
         @in_pods_servLine VARCHAR(MAX),
         @in_depid VARCHAR(MAX)
 
-SET @StartDate = '1/1/2017 00:00 AM'
-SET @EndDate = '1/1/2031 00:00 AM'
+--SET @StartDate = '1/1/2017 00:00 AM'
+--SET @EndDate = '1/1/2031 00:00 AM'
+SET @StartDate = '7/1/2020 00:00 AM'
+SET @EndDate = '7/1/2021 00:00 AM'
 
 SET @DepartmentGrouperColumn = 'service_line'
 --SET @DepartmentGrouperColumn = 'pod_name'
@@ -113,8 +115,8 @@ VALUES
 --('(No Service Line Defined)')
 --('Medical Subspecialties')
 --('Digestive Health')
---('Womens and Childrens')
-('Ophthalmology')
+('Womens and Childrens')
+--('Ophthalmology')
 ;
 
 SELECT @in_pods_servLine = COALESCE(@in_pods_servLine+',' ,'') + CAST(ServiceLineName AS VARCHAR(MAX))
@@ -170,6 +172,12 @@ INSERT INTO @Department
 )
 SELECT DepartmentId
 FROM #RecallDepartment
+WHERE DepartmentId IN
+ (10354013 --	UVBB PEDS RHEUM CL
+ ,10354014 --	UVBB PEDS GASTRO CL
+ ,10354016 --	UVBB PEDS SURGERY CL
+ ,10354017 --	UVBB PEDS GENETICS CL
+ )
 ;
 
 SELECT @in_depid = COALESCE(@in_depid+',' ,'') + CAST(DepartmentId AS VARCHAR(MAX))

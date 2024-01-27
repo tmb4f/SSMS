@@ -1,0 +1,240 @@
+USE CLARITY
+
+SELECT enc.[PAT_ID]
+      ,pat.PAT_MRN_ID
+      ,[APPT_TIME]
+      ,enc.[PAT_ENC_DATE_REAL]
+      ,enc.[PAT_ENC_CSN_ID]
+      ,enc.[CONTACT_DATE]
+      ,[ENC_TYPE_C]
+      ,[ENC_TYPE_TITLE]
+	  ,zdet.NAME AS ENC_TYPE_NAME
+      ,[VISIT_PROV_ID]
+      ,[VISIT_PROV_TITLE]
+	  ,ser.PROV_NAME AS ser_PROV_NAME
+      ,enc.[DEPARTMENT_ID]
+	  ,dep2.DEPARTMENT_NAME
+      ,[AGE]
+      --,[PCP_PROV_ID]
+      --,[FIN_CLASS_C]
+      --,[BP_SYSTOLIC]
+      --,[BP_DIASTOLIC]
+      --,[TEMPERATURE]
+      --,[PULSE]
+      --,[WEIGHT]
+      --,[HEIGHT]
+      --,[RESPIRATIONS]
+      --,[LMP_DATE]
+      --,[LMP_OTHER_C]
+      --,[HEAD_CIRCUMFERENCE]
+      --,[ENC_CLOSED_YN]
+      --,[ENC_CLOSED_USER_ID]
+      --,[ENC_CLOSE_DATE]
+      --,[LOS_PRIME_PROC_ID]
+      --,[LOS_PROC_CODE]
+      --,[LOS_MODIFIER1_ID]
+      --,[LOS_MODIFIER2_ID]
+      --,[LOS_MODIFIER3_ID]
+      --,[LOS_MODIFIER4_ID]
+      --,[CHKIN_INDICATOR_C]
+      --,[CHKIN_INDICATOR_DT]
+      ,enc.[APPT_STATUS_C]
+	  ,zas.NAME AS APPT_STATUS_NAME
+      ,[APPT_BLOCK_C]
+      ,[APPT_LENGTH]
+      ,[APPT_MADE_DATE]
+      ,[APPT_PRC_ID]
+      ,[CHECKIN_TIME]
+      ,[CHECKOUT_TIME]
+      ,[ARVL_LST_DL_TIME]
+      ,[ARVL_LST_DL_USR_ID]
+      ,[APPT_ENTRY_USER_ID]
+      ,[APPT_CANC_USER_ID]
+      ,[APPT_CANCEL_DATE]
+      ,[CHECKIN_USER_ID]
+      ,enc.[CANCEL_REASON_C]
+      ,[APPT_SERIAL_NO]
+      ,enc.[HOSP_ADMSN_TIME]
+      ,[HOSP_DISCHRG_TIME]
+      ,enc.[HOSP_ADMSN_TYPE_C]
+	  ,zhat.NAME AS [HOSP_ADMSN_TYPE_NAME]
+      --,[NONCVRED_SERVICE_YN]
+      --,[REFERRAL_REQ_YN]
+      --,[REFERRAL_ID]
+      --,[ACCOUNT_ID]
+      --,enc.[COVERAGE_ID]
+      --,[AR_EPISODE_ID]
+      --,enc.[CLAIM_ID]
+      --,[PRIMARY_LOC_ID]
+      --,[CHARGE_SLIP_NUMBER]
+      --,[VISIT_EPM_ID]
+      --,[VISIT_EPP_ID]
+      --,[VISIT_FC]
+      --,[COPAY_DUE]
+      --,[COPAY_COLLECTED]
+      --,[COPAY_SOURCE_C]
+      --,[COPAY_TYPE_C]
+      --,[COPAY_REF_NUM]
+      --,[COPAY_PMT_EXPL_C]
+      --,enc.[UPDATE_DATE]
+      ,enc.[SERV_AREA_ID]
+      ,enc.[HSP_ACCOUNT_ID]
+	  ,hsp.ADT_CONTACT
+	  ,hsp.ADT_PAT_CLASS_C
+	  ,zpc.NAME AS ADT_PAT_CLASS_NAME
+	  ,hsp. ADT_PATIENT_STAT_C
+	  ,zps.NAME AS ADT_PATIENT_STAT_NAME
+	  ,hsp.ADMIT_CATEGORY_C
+	  ,hsp. ADMIT_SOURCE_C
+	  ,zasc.NAME AS ADMIT_SOURCE_NAME
+	  ,hsp. ADT_ARRIVAL_STS_C
+	  ,hsp. ADMISSION_PROV_ID
+	  ,ser2.PROV_NAME AS ADMISSION_PROV_NAME
+	  ,hsp. ADT_ARRIVAL_TIME
+	  ,hsp.HOSP_ADMSN_TIME
+	  ,hsp. ADM_EVENT_ID
+	  ,hsp. HOSP_ADMSN_TYPE_C
+	  ,zhat2.NAME AS hsp_HOSP_ADMSN_TYPE_NAME
+	  ,hsp.INP_ADM_EVENT_ID
+	  ,hsp.INP_ADM_EVENT_DATE
+	  ,hsp.INP_ADM_DATE
+	  ,hsp.REFERRING_DEPT_ID
+	  ,hsp.ADMIT_CONF_STAT_C
+	  ,zcs.NAME AS ADMIT_CONF_STAT_NAME
+	  --,hspa.ADM_DEPARMENT_ID
+	  ,adt.DEPARTMENT_ID AS adt_DEPARTMENT_ID
+	  ,dep.DEPARTMENT_NAME AS adt_DEPARTMENT_NAME
+	  ,ord.ORDERING_DATE
+	  ,ord.ORDER_TYPE_C
+	  ,zot.NAME AS ORDER_TYPE_NAME
+	  ,ord.AUTHRZING_PROV_ID
+	  ,ser3.PROV_NAME AS AUTHRZING_PROV_NAME
+	  ,ord.ORDER_PROC_ID
+	  ,ord.ORDER_INST
+	  ,ord.DESCRIPTION AS ord_DESCRIPTION
+      --,[ADM_FOR_SURG_YN]
+      --,[SURGICAL_SVC_C]
+      ,enc.[INPATIENT_DATA_ID]
+      ,enc.[IP_EPISODE_ID]
+      --,[APPT_QNR_ANS_ID]
+      ,[ATTND_PROV_ID]
+      ,[ORDERING_PROV_TEXT]
+      --,[ES_ORDER_STATUS_C]
+      --,[EXTERNAL_VISIT_ID]
+      --,[CONTACT_COMMENT]
+      --,[OUTGOING_CALL_YN]
+      --,[DATA_ENTRY_PERSON]
+      --,[IS_WALK_IN_YN]
+      --,enc.[CM_CT_OWNER_ID]
+      --,[REFERRAL_SOURCE_ID]
+      --,[SIGN_IN_TIME]
+      --,[SIGN_IN_USER_ID]
+      --,[APPT_TARGET_DATE]
+      --,[WC_TPL_VISIT_C]
+      --,[ROUTE_SUM_PRNT_YN]
+      --,[CONSENT_TYPE_C]
+      --,[PHONE_REM_STAT_C]
+      --,[APPT_CONF_STAT_C]
+      --,[APPT_CONF_PERS]
+      --,[APPT_CONF_INST]
+      --,[CANCEL_REASON_CMT]
+      --,[ORDERING_PROV_ID]
+      --,[BMI]
+      --,[BSA]
+      --,[AVS_PRINT_TM]
+      --,[AVS_FIRST_USER_ID]
+      --,[ENC_MED_FRZ_RSN_C]
+      --,[WC_TPL_VISIT_CMT]
+      --,[HOSP_LICENSE_C]
+      --,[ACCREDITATION_C]
+      --,[CERTIFICATION_C]
+      --,[ENTITY_C]
+      --,[EFFECTIVE_DATE_DT]
+      --,[DISCHARGE_DATE_DT]
+      --,[EFFECTIVE_DEPT_ID]
+      --,[TOBACCO_USE_VRFY_YN]
+      --,[PHON_CALL_YN]
+      --,[PHON_NUM_APPT]
+      --,[ENC_CLOSE_TIME]
+      --,[COPAY_PD_THRU]
+      --,[INTERPRETER_NEED_YN]
+      --,[VST_SPECIAL_NEEDS_C]
+      --,[INTRP_ASSIGNMENT_C]
+      --,[ASGND_INTERP_TYPE_C]
+      --,[INTERPRETER_VEND_C]
+      --,[INTERPRETER_NAME]
+      --,[CHECK_IN_KIOSK_ID]
+      --,[BENEFIT_PACKAGE_ID]
+      --,[BENEFIT_COMP_ID]
+      --,[BEN_ADJ_TABLE_ID]
+      --,[BEN_ADJ_FORMULA_ID]
+      --,[BEN_ENG_SP_AMT]
+      --,[BEN_ADJ_COPAY_AMT]
+      --,[BEN_ADJ_METHOD_C]
+      --,[DOWNTIME_CSN]
+      --,[ENTRY_TIME]
+      --,[ENC_CREATE_USER_ID]
+      --,[ENC_INSTANT]
+      --,[ED_ARRIVAL_KIOSK_ID]
+      --,[EFFECTIVE_DATE_DTTM]
+      --,[CALCULATED_ENC_STAT_C]
+      --,[APPT_CONF_USER_ID]
+      --,[APPT_CANC_UTC_DTTM]
+      ,[APPT_CANC_DTTM]
+  FROM [CLARITY].[dbo].[PAT_ENC] enc
+  LEFT OUTER JOIN dbo.PATIENT pat
+  ON pat.PAT_ID = enc.PAT_ID
+  LEFT OUTER JOIN dbo.CLARITY_SER ser
+  ON ser.PROV_ID = enc.VISIT_PROV_ID
+  LEFT OUTER JOIN dbo.CLARITY_DEP dep2
+  ON dep2.DEPARTMENT_ID =enc.DEPARTMENT_ID
+  LEFT OUTER JOIN dbo.ZC_APPT_STATUS zas
+  ON zas.APPT_STATUS_C = enc.APPT_STATUS_C
+  LEFT OUTER JOIN dbo.ZC_HOSP_ADMSN_TYPE zhat
+  ON zhat.HOSP_ADMSN_TYPE_C = enc.HOSP_ADMSN_TYPE_C
+  LEFT OUTER JOIN dbo.ZC_DISP_ENC_TYPE zdet
+  ON zdet.DISP_ENC_TYPE_C = enc.ENC_TYPE_C
+  LEFT OUTER JOIN dbo.V_PAT_ENC_HSP hsp
+  ON hsp. HSP_ACCOUNT_ID = enc.HSP_ACCOUNT_ID
+  --INNER JOIN dbo.V_HSP_ACCOUNT hspa
+  --ON hspa.HSP_ACCOUNT_ID = hsp.HSP_ACCOUNT_ID
+  LEFT OUTER JOIN dbo.ZC_PAT_CLASS zpc
+  ON zpc.ADT_PAT_CLASS_C = hsp.ADT_PAT_CLASS_C
+  LEFT OUTER JOIN dbo.ZC_PAT_STATUS zps
+  ON zps.ADT_PATIENT_STAT_C = hsp.ADT_PATIENT_STAT_C
+  LEFT OUTER JOIN dbo.ZC_ADM_SOURCE zasc
+  ON zasc.ADMIT_SOURCE_C = hsp.ADMIT_SOURCE_C
+  LEFT OUTER JOIN dbo.CLARITY_SER ser2
+  ON ser2.PROV_ID = hsp.ADMISSION_PROV_ID
+  LEFT OUTER JOIN dbo.ZC_HOSP_ADMSN_TYPE zhat2
+  ON zhat2.HOSP_ADMSN_TYPE_C = hsp.HOSP_ADMSN_TYPE_C
+  LEFT OUTER JOIN dbo.ZC_CONF_STAT zcs
+  ON zcs.ADMIT_CONF_STAT_C = hsp.ADMIT_CONF_STAT_C
+  LEFT OUTER JOIN dbo.CLARITY_ADT adt
+  ON adt.EVENT_ID = hsp.ADM_EVENT_ID
+  LEFT OUTER JOIN dbo.CLARITY_DEP dep
+  ON dep.DEPARTMENT_ID = adt.DEPARTMENT_ID
+  LEFT OUTER JOIN dbo.ORDER_PROC ord
+  ON ord.PAT_ENC_CSN_ID = enc.PAT_ENC_CSN_ID
+  LEFT OUTER JOIN dbo.ZC_ORDER_TYPE zot
+  ON zot.ORDER_TYPE_C = ord.ORDER_TYPE_C
+  LEFT OUTER JOIN dbo.CLARITY_SER ser3
+  ON ser3.PROV_ID = ord.AUTHRZING_PROV_ID
+  --WHERE enc.PAT_ENC_CSN_ID = 200041413832
+  WHERE
+  --enc.DEPARTMENT_ID = 10239015 -- UVMS SURGERY
+  --AND enc.APPT_STATUS_C = 2 -- Completed
+  enc.APPT_STATUS_C = 2 -- Completed
+  --AND enc.APPT_TIME BETWEEN '7/1/2020 00:00 AM' AND '6/30/2021 11:59 PM'
+  AND enc.APPT_TIME BETWEEN '7/1/2020 00:00 AM' AND '9/5/2021 11:59 PM'
+  --AND hsp.ADT_PAT_CLASS_C = '101' -- Inpatient
+  --AND hsp. ADT_PATIENT_STAT_C = 2 -- Admission
+  AND hsp. ADT_PATIENT_STAT_C IN (2,3) -- Admission, Discharged
+  AND enc.ENC_TYPE_C = 101 -- Office Visit
+  AND ord.ORDER_TYPE_C = 47 -- Admission
+  AND enc.DEPARTMENT_ID = 10239015 -- UVMS SURGERY
+  ORDER BY enc.APPT_TIME
+  --ORDER BY pat.PAT_MRN_ID, enc.APPT_TIME
+  --WHERE
+  --pat.PAT_MRN_ID = '1898950'
+  --ORDER BY pat.PAT_MRN_ID, enc.APPT_TIME

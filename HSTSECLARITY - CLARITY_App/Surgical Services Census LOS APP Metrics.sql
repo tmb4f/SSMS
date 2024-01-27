@@ -1,0 +1,749 @@
+USE CLARITY
+GO
+
+/*-----------------------------------------------------------------------------------------------------------------
+	WHAT: Midnight patient census data, for past 2-years (11/1/2020 - 10/31/2022),
+	for EPIC provider team "Trauma Surgery PIC#1450" (Acute Care Trauma).	Length of stay for same period and group.
+	TFS User Story 31999
+	WHO: Chris Mitchell
+	WHEN: 1/25/23
+	WHY: Staffing needs for Trauma Surgery team
+	-----------------------------------------------------------------------------------------------------------------
+	MODS: 
+	2/1/23 cjm2vk: changed last_value on the action to pull the action id, not the name of the action
+	2/2/23 cjm2vk: add location
+		1.	If Trauma ICU team listed and patient located in STICU / 5-North / Other ICU or IMU, then do not include 
+		in Trauma Surgery MN census numbers
+		2.	If Trauma ICU team listed and patient located in acute ward bed (5-West, 5-Central, or 6-West), then include
+		in Trauma Surgery MN census
+
+		STICU / 5 NORTH (DON'T INCLUDE IN TS MN CENSUS)
+		-- STICU 10243046
+		-- 5 north 10243090
+	
+		ACUTE WARD (INCLUDE IN TS MN CENSUS)
+		-- 5 west 10243060
+		-- 5 central 10243058
+		-- 6 west 10243063
+
+	2/6/23 cjm2vk: possible there's not an audit on every day there's an ADT census - fill out audit vs adt dates
+	2/6/23 cjm2vk: add patients w/ 101 service too, will count if on right unit
+-----------------------------------------------------------------------------------------------------------------------
+*/
+DECLARE @start DATETIME = '2021-01-01 00:00:00.000';
+DECLARE @END DATETIME = '2022-12-31 23:59:59';
+--DECLARE @END DATETIME = '2022-05-31 23:59:59';
+
+DROP TABLE IF EXISTS #pats;
+DROP TABLE IF EXISTS #adt;
+DROP TABLE IF EXISTS #audit_day;
+DROP TABLE IF EXISTS #audit_day2;
+DROP TABLE IF EXISTS #audit_day3;
+DROP TABLE IF EXISTS #adt2;
+DROP TABLE IF EXISTS #census;
+DROP TABLE IF EXISTS #los;
+
+/*"Green Surgery Team" ID 69) (Attendings: Allan Tsung 126209, Todd Bauer 30332, Victor Zaydfudim 57158)
+b. Orange / Bariatric (EPIC listed as "Orange Surgery" ID 72) (Attendings: Peter Hallowell 30272, Bruce Schirmer 30317, Nick Levinsky 130914, Zequan Yang 46748 [After 11/2022, he switched from EGS to Orange])
+c. EGS / Emergency General Surgery (EPIC listed as "EGS Team" ID 73) (Attendings: Zequan Yang [Until 11/2022], Carlos Tache Leon 34027, Molly Flannagan 105151, John Davis 45837, Jeff Young 30284, Michael D. Williams 51087, James Forrest Calland 30344)
+d. Red / Endocrine (EPIC listed as "Red Surgery Team" ID 190) (Attendings: Phillip Smith 46621, Anna Fashandi 56357)
+*/
+
+DECLARE @PROVTEAM TABLE
+(
+PROV_ID VARCHAR(18),
+RECORD_NAME VARCHAR(200)
+)
+
+INSERT INTO @PROVTEAM
+(
+    PROV_ID,
+    RECORD_NAME
+)
+VALUES
+ ('105151', -- FLANNAGAN, MOLLY A
+  'EGS Team') -- "EGS Team" ID 73
+,('126209', -- TSUNG, ALLAN
+  'Green Surgery Team') -- "Green Surgery Team" ID 69
+,('130914', -- LEVINSKY JR, NICK C
+  'Orange Surgery') -- "Orange Surgery" ID 72
+,('30272', -- HALLOWELL, PETER
+  'Orange Surgery') -- "Orange Surgery" ID 72
+,('30284', -- YOUNG, JEFFREY SETH
+  'EGS Team') -- "EGS Team" ID 73
+,('30317', -- SCHIRMER, BRUCE
+  'Orange Surgery') -- "Orange Surgery" ID 72
+,('30332', -- BAUER, TODD W
+  'Green Surgery Team') -- "Green Surgery Team" ID 69
+,('30344', -- CALLAND, JAMES F
+  'EGS Team') -- "EGS Team" ID 73
+,('34027', -- TACHE-LEON, CARLOS
+  'EGS Team') -- "EGS Team" ID 73
+,('45837', -- DAVIS, JOHN P
+  'EGS Team') -- "EGS Team" ID 73
+,('46621', -- SMITH, PHILIP W
+  'Red Surgery Team') -- "Red Surgery Team" ID 190
+,('46748', -- YANG, ZEQUAN
+  'Orange Surgery') -- "Orange Surgery" ID 72
+,('51087', -- WILLIAMS, MICHAEL D
+  'EGS Team') -- "EGS Team" ID 73
+,('56357', -- FASHANDI, ANNA Z
+  'Red Surgery Team') -- "Red Surgery Team" ID 190
+,('57158', -- ZAYDFUDIM, VICTOR M
+  'Green Surgery Team') -- "Green Surgery Team" ID 69
+;
+
+	SELECT DISTINCT 
+		 eta.PAT_ID
+		,eta.PAT_ENC_CSN_ID
+		--,hsp.HOSP_DISCH_TIME
+	INTO #pats
+	FROM CLARITY..EPT_TEAM_AUDIT eta
+	--INNER JOIN
+	--(
+	--SELECT DISTINCT
+	--	PAT_ENC_CSN_ID
+	--   ,HOSP_DISCH_TIME
+	--FROM CLARITY..PAT_ENC_HSP
+	--) hsp
+	--ON eta.PAT_ENC_CSN_ID = hsp.PAT_ENC_CSN_ID
+	WHERE 1 = 1
+		--AND eta.TEAM_AUDIT_ID IN (55,101)  -- TRAUMA SURGERY, TRAUMA ICU
+        AND eta.TEAM_AUDIT_ID IN (69,72,73,190) -- Green Surgery Team, Orange Surgery, EGS Team, Red Surgery Team
+		--AND eta.PAT_ENC_CSN_ID = 200035563006
+		AND eta.TEAM_AUDIT_INSTANT >=  @start
+		AND eta.TEAM_AUDIT_INSTANT <= @end
+    ORDER BY eta.PAT_ID, eta.PAT_ENC_CSN_ID
+
+CREATE UNIQUE CLUSTERED INDEX IX_pats
+ON #pats (
+            [PAT_ID]
+		   ,[PAT_ENC_CSN_ID]
+);
+
+--SELECT *
+--FROM #pats
+
+	SELECT
+		 adt.DEPARTMENT_ID
+		,dep.DEPARTMENT_NAME
+		,adt.ROOM_ID
+		,rm.ROOM_NAME
+		,adt.BED_ID
+		,bed.BED_LABEL
+		,adt.EFFECTIVE_TIME
+		,CONVERT(DATE, adt.EFFECTIVE_TIME) AS EFFECTIVE_DT
+		,adt.PAT_ID
+		,adt.PAT_ENC_CSN_ID
+		,adt.EVENT_ID
+		,adt.EVENT_TYPE_C
+		,adt.EVENT_SUBTYPE_C
+		,MIN(CONVERT(DATE,adt.EFFECTIVE_TIME)) OVER (PARTITION BY adt.PAT_ENC_CSN_ID) AS MIN_EFFECTIVE_DT
+		,MAX(CONVERT(DATE,adt.EFFECTIVE_TIME)) OVER (PARTITION BY adt.PAT_ENC_CSN_ID) AS MAX_EFFECTIVE_DT
+		--,CASE WHEN adt.DEPARTMENT_ID IN 
+		--	(
+		--		-- ACUTE WARDS (INCLUDE IN TRAUMA SURG MIDNIGHT CENSUS)
+		--		'10243060', -- 5 WEST
+		--		'10243058',-- 5 CENTRAL
+		--		'10243063' -- 6 WEST
+		--	)
+		-- THEN 1 ELSE 0 END AS ACUTE_FLAG
+		,CASE WHEN adt.DEPARTMENT_ID IN 
+			(
+				-- excluding patients on each service who are in the STICU [5184 - 5198] or SIMU [5125 - 5136])
+				'10243046', -- UVHE SURG TRAM ICU
+				'10243090'  -- UVHE 5 NORTH
+			)
+		 THEN 0 ELSE 1 END AS ACUTE_FLAG
+	INTO #adt
+	FROM dbo.CLARITY_ADT adt
+	INNER JOIN #pats pats
+		ON adt.PAT_ID = pats.PAT_ID AND adt.PAT_ENC_CSN_ID = pats.PAT_ENC_CSN_ID
+	LEFT OUTER JOIN CLARITY..CLARITY_DEP dep
+		ON adt.DEPARTMENT_ID = dep.DEPARTMENT_ID
+	LEFT OUTER JOIN
+	(
+	SELECT DISTINCT
+		BED_ID
+	   ,BED_LABEL
+	FROM CLARITY..CLARITY_BED
+	) bed
+	ON adt.BED_ID = bed.BED_ID
+	LEFT OUTER JOIN
+	(
+	SELECT DISTINCT
+		ROOM_ID
+	   ,ROOM_NAME
+	FROM CLARITY..CLARITY_ROM
+	) rm
+	ON adt.ROOM_ID = rm.ROOM_ID
+	WHERE adt.EFFECTIVE_TIME >= @start AND adt.EFFECTIVE_TIME <= @end
+	AND adt.EVENT_TYPE_C = 6 -- census
+	AND adt.EVENT_SUBTYPE_C IN (1,3) -- original, update
+	AND adt.PAT_ENC_CSN_ID IS NOT NULL
+    ORDER BY adt.PAT_ID, adt.PAT_ENC_CSN_ID, adt.EVENT_ID, adt.EFFECTIVE_TIME
+
+CREATE UNIQUE CLUSTERED INDEX IX_adt
+ON #adt (
+            [PAT_ID]
+		   ,[PAT_ENC_CSN_ID]
+		   ,[EVENT_ID]
+		   ,[EFFECTIVE_TIME]
+);
+
+	--SELECT 
+ --          PAT_ENC_CSN_ID,
+	--	   DEPARTMENT_ID,
+ --          DEPARTMENT_NAME,
+ --          ROOM_ID,
+	--	   ROOM_NAME,
+ --          BED_ID,
+	--	   BED_LABEL,
+	--	   EFFECTIVE_TIME,
+ --          EFFECTIVE_DT,
+ --          PAT_ID,
+ --          EVENT_ID,
+ --          EVENT_TYPE_C,
+	--	   EVENT_SUBTYPE_C,
+ --          MIN_EFFECTIVE_DT,
+ --          MAX_EFFECTIVE_DT
+	--FROM #adt
+	----ORDER BY PAT_ENC_CSN_ID
+	--ORDER BY PAT_ENC_CSN_ID, EVENT_ID
+
+	--SELECT DISTINCT
+	--	   DEPARTMENT_ID,
+ --          DEPARTMENT_NAME,
+	--	   ROOM_NAME
+	--FROM #adt
+	--ORDER BY DEPARTMENT_NAME, ROOM_NAME
+
+	SELECT DISTINCT
+		 eta.PAT_ENC_CSN_ID
+		,eta.PAT_ID
+		--,eta.TEAM_AUDIT_INSTANT
+		,CONVERT(DATE,eta.TEAM_AUDIT_INSTANT) AS AUDIT_DT
+		,MIN(CONVERT(DATE,eta.TEAM_AUDIT_INSTANT)) OVER (PARTITION BY eta.PAT_ENC_CSN_ID) AS MIN_AUDIT_DT
+		,MAX(CONVERT(DATE,eta.TEAM_AUDIT_INSTANT)) OVER (PARTITION BY eta.PAT_ENC_CSN_ID) AS MAX_AUDIT_DT
+		,MAX(eta.TEAM_AUDIT_INSTANT) OVER (PARTITION BY eta.PAT_ENC_CSN_ID, CONVERT(DATE,TEAM_AUDIT_INSTANT)) AS LST_AUDIT_INST_DAY
+		,LAST_VALUE(eta.TEAM_AUDIT_ID) OVER (PARTITION BY eta.PAT_ENC_CSN_ID, CONVERT(DATE,TEAM_AUDIT_INSTANT) ORDER BY eta.TEAM_AUDIT_INSTANT RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS LST_AUDIT_ID
+		,LAST_VALUE(eta.TEAM_ACTION_C) OVER (PARTITION BY eta.PAT_ENC_CSN_ID, CONVERT(DATE,TEAM_AUDIT_INSTANT) ORDER BY eta.TEAM_AUDIT_INSTANT RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS LST_AUDIT_ACTION
+	INTO #audit_day
+	FROM CLARITY..EPT_TEAM_AUDIT eta
+	LEFT OUTER JOIN CLARITY..ZC_TEAM_ACTION zta
+		ON eta.TEAM_ACTION_C = zta.TEAM_ACTION_C
+	INNER JOIN #pats pats
+		ON eta.PAT_ID = pats.PAT_ID AND eta.PAT_ENC_CSN_ID = pats.PAT_ENC_CSN_ID
+	WHERE eta.TEAM_AUDIT_INSTANT >= @start AND eta.TEAM_AUDIT_INSTANT <= @end
+    ORDER BY MIN_AUDIT_DT, MAX_AUDIT_DT, PAT_ENC_CSN_ID
+
+--CREATE UNIQUE CLUSTERED INDEX IX_audit_day
+--ON #audit_day (
+--            [MIN_AUDIT_DT]
+--		   ,[MAX_AUDIT_DT]
+--		   ,[PAT_ENC_CSN_ID]
+--		   ,[TEAM_AUDIT_INSTANT]
+--);
+
+CREATE NONCLUSTERED INDEX IX_audit_day
+ON #audit_day (
+            [MIN_AUDIT_DT]
+		   ,[MAX_AUDIT_DT]
+		   ,[PAT_ENC_CSN_ID]
+);
+
+--SELECT
+--	*
+--FROM #audit_day
+----ORDER BY PAT_ID, PAT_ENC_CSN_ID
+--ORDER BY MIN_AUDIT_DT, MAX_AUDIT_DT, PAT_ENC_CSN_ID
+
+	SELECT DISTINCT
+			audit_day.PAT_ENC_CSN_ID
+		,c.CALENDAR_DT AS ASSIGNED_DT
+		,( -- Get LST_AUDIT_ID FOR AUDIT RANGE
+			SELECT TOP (1)
+				A.LST_AUDIT_ID
+			FROM #audit_day AS A
+			WHERE A.AUDIT_DT <= c.CALENDAR_DT AND A.PAT_ENC_CSN_ID = C.PAT_ENC_CSN_ID
+			ORDER BY A.AUDIT_DT DESC
+			) AS LST_AUDIT_ID
+		,( -- Get LST_AUDIT_ACTN FOR AUDIT RANGE
+			SELECT TOP (1)
+				A.LST_AUDIT_ACTION
+			FROM #audit_day AS A
+			WHERE A.AUDIT_DT <= c.CALENDAR_DT AND A.PAT_ENC_CSN_ID = C.PAT_ENC_CSN_ID
+			ORDER BY A.AUDIT_DT DESC
+			) AS LST_AUDIT_ACTION
+		,CASE WHEN
+			( -- if last action of a day is remove...flag it
+			SELECT TOP (1)
+				A.LST_AUDIT_ACTION
+			FROM #audit_day AS A
+			WHERE A.AUDIT_DT <= c.CALENDAR_DT AND A.PAT_ENC_CSN_ID = C.PAT_ENC_CSN_ID
+			ORDER BY A.AUDIT_DT DESC
+			) = '3' THEN 1 ELSE 0 END AS SVC_REMOVED -- 3 = removed
+	INTO #audit_day2
+	FROM #audit_day audit_day
+	LEFT OUTER JOIN 
+	(
+		SELECT
+			 dd.CALENDAR_DT
+			,x.PAT_ENC_CSN_ID
+		FROM CLARITY..DATE_DIMENSION dd
+		CROSS APPLY (SELECT DISTINCT PAT_ENC_CSN_ID FROM #audit_day) AS x
+		WHERE dd.CALENDAR_DT >= @start AND dd.CALENDAR_DT <= @end
+	) c
+		ON c.CALENDAR_DT BETWEEN audit_day.MIN_AUDIT_DT AND audit_day.MAX_AUDIT_DT AND c.PAT_ENC_CSN_ID = audit_day.PAT_ENC_CSN_ID
+    ORDER BY PAT_ENC_CSN_ID
+
+CREATE UNIQUE CLUSTERED INDEX IX_audit_day2
+ON #audit_day2 (
+            [PAT_ENC_CSN_ID]
+		   ,[ASSIGNED_DT]
+);
+
+		--SELECT
+		--	PAT_ENC_CSN_ID,
+  --          ASSIGNED_DT,
+  --          LST_AUDIT_ID,
+  --          LST_AUDIT_ACTION,
+  --          SVC_REMOVED
+		--FROM #audit_day2
+		--ORDER BY PAT_ENC_CSN_ID, ASSIGNED_DT
+
+	SELECT DISTINCT
+			audit_day2.PAT_ENC_CSN_ID
+		,c.CALENDAR_DT AS ASSIGNED_DT
+		,( -- Get LST_AUDIT_ID FOR ADT RANGE
+			SELECT TOP (1)
+				A.LST_AUDIT_ID
+			FROM #audit_day2 AS A
+			WHERE A.ASSIGNED_DT <= c.CALENDAR_DT AND A.PAT_ENC_CSN_ID = C.PAT_ENC_CSN_ID
+			ORDER BY A.ASSIGNED_DT DESC
+			) AS LST_AUDIT_ID
+		,( -- Get LST_AUDIT_ACTN FOR ADT RANGE
+			SELECT TOP (1)
+				A.LST_AUDIT_ACTION
+			FROM #audit_day2 AS A
+			WHERE A.ASSIGNED_DT <= c.CALENDAR_DT AND A.PAT_ENC_CSN_ID = C.PAT_ENC_CSN_ID
+			ORDER BY A.ASSIGNED_DT DESC
+			) AS LST_AUDIT_ACTION
+		,CASE WHEN
+			( -- if last action of a day is remove...flag it
+			SELECT TOP (1)
+				A.LST_AUDIT_ACTION
+			FROM #audit_day2 AS A
+			WHERE A.ASSIGNED_DT <= c.CALENDAR_DT AND A.PAT_ENC_CSN_ID = C.PAT_ENC_CSN_ID
+			ORDER BY A.ASSIGNED_DT DESC
+			) = '3' THEN 1 ELSE 0 END AS SVC_REMOVED -- 3 = removed
+	INTO #audit_day3
+	FROM #audit_day2 audit_day2
+	INNER JOIN #adt adt
+		ON audit_day2.PAT_ENC_CSN_ID = adt.PAT_ENC_CSN_ID
+	LEFT OUTER JOIN 
+	(
+		SELECT
+			 dd.CALENDAR_DT
+			,x.PAT_ENC_CSN_ID
+		FROM CLARITY..DATE_DIMENSION dd
+		CROSS APPLY (SELECT DISTINCT PAT_ENC_CSN_ID FROM #audit_day) AS x
+		WHERE dd.CALENDAR_DT >= @start AND dd.CALENDAR_DT <= @end
+	) c
+		ON c.CALENDAR_DT BETWEEN adt.MIN_EFFECTIVE_DT AND adt.MAX_EFFECTIVE_DT AND c.PAT_ENC_CSN_ID = audit_day2.PAT_ENC_CSN_ID
+    ORDER BY audit_day2.PAT_ENC_CSN_ID, c.CALENDAR_DT
+
+CREATE UNIQUE CLUSTERED INDEX IX_audit_day3
+ON #audit_day3 (
+            [PAT_ENC_CSN_ID]
+		   ,[ASSIGNED_DT]
+);
+
+		--SELECT
+		--	PAT_ENC_CSN_ID,
+  --          ASSIGNED_DT,
+  --          LST_AUDIT_ID,
+  --          LST_AUDIT_ACTION,
+  --          SVC_REMOVED
+		--FROM #audit_day3
+		--ORDER BY PAT_ENC_CSN_ID, ASSIGNED_DT
+
+CREATE NONCLUSTERED INDEX IX_adt3
+ON #adt (
+		    [EVENT_ID]
+           ,[PAT_ID]
+		   ,[PAT_ENC_CSN_ID]
+		   ,[EFFECTIVE_TIME]
+);
+
+SELECT DISTINCT
+	 adt.EVENT_ID
+	,adt.EFFECTIVE_TIME
+	,adt.EFFECTIVE_DT
+	,ad3.ASSIGNED_DT
+	,ad3.LST_AUDIT_ID
+	,ad3.SVC_REMOVED
+	,ad3.LST_AUDIT_ACTION
+	,adt.ACUTE_FLAG
+	--,IIF(ad3.LST_AUDIT_ID = 55 AND ad3.SVC_REMOVED <> 1,1,IIF(ad3.LST_AUDIT_ID = 101 AND ad3.SVC_REMOVED <> 1 AND adt.ACUTE_FLAG = 1,1,0)) AS EVENT_COUNT
+	,CASE WHEN ad3.LST_AUDIT_ID IN (69,72,73,190) AND ad3.SVC_REMOVED <> 1 AND adt.ACUTE_FLAG = 1 THEN 1 ELSE 0 END AS EVENT_COUNT
+	,evt.NAME AS EVENT_TYPE
+	,PC.NAME AS PAT_CLASS
+	,pat.PAT_MRN_ID
+	,adt.PAT_ID
+	,pat.PAT_NAME
+	,adt.PAT_ENC_CSN_ID
+	,adt.DEPARTMENT_ID
+	,adt.DEPARTMENT_NAME
+	,adt.ROOM_ID
+	,adt.BED_ID
+	,ptri.RECORD_NAME
+INTO #adt2
+FROM #adt adt
+INNER JOIN ADT_INTERPRETATION ait
+	ON adt.EVENT_ID = ait.EVENT_ID
+INNER JOIN PATIENT pat
+	ON adt.PAT_ID = pat.PAT_ID
+INNER JOIN PAT_ENC_HSP peh
+	ON adt.PAT_ENC_CSN_ID = peh.PAT_ENC_CSN_ID
+INNER JOIN ZC_PAT_CLASS pc
+	ON peh.ADT_PAT_CLASS_C = pc.ADT_PAT_CLASS_C
+INNER JOIN #audit_day3 ad3
+	ON adt.PAT_ENC_CSN_ID = ad3.PAT_ENC_CSN_ID AND adt.EFFECTIVE_DT = ad3.ASSIGNED_DT
+LEFT OUTER JOIN CLARITY..PROVTEAM_REC_INFO ptri
+	ON ad3.LST_AUDIT_ID = ptri.ID
+LEFT OUTER JOIN dbo.ZC_EVENT_TYPE evt
+	ON adt.EVENT_TYPE_C = evt.EVENT_TYPE_C
+
+--WHERE adt.PAT_ENC_CSN_ID = 200038671957
+
+CREATE UNIQUE CLUSTERED INDEX IX_adt2
+ON #adt2 (
+		    [PAT_ENC_CSN_ID]
+		   ,[EFFECTIVE_TIME]
+);
+
+--SELECT
+--    PAT_ENC_CSN_ID,
+--	EVENT_ID,
+--    EFFECTIVE_TIME,
+--    EFFECTIVE_DT,
+--	ASSIGNED_DT,
+--    LST_AUDIT_ID,
+--    SVC_REMOVED,
+--    LST_AUDIT_ACTION,
+--    ACUTE_FLAG,
+--    EVENT_COUNT,
+--    EVENT_TYPE,
+--    PAT_CLASS,
+--    PAT_MRN_ID,
+--    PAT_ID,
+--    PAT_NAME,
+--    DEPARTMENT_ID,
+--    DEPARTMENT_NAME,
+--    ROOM_ID,
+--    BED_ID,
+--    RECORD_NAME
+--FROM #adt2
+----WHERE LST_AUDIT_ID IN (69,72,73,190)
+----ORDER BY PAT_ID, PAT_ENC_CSN_ID, EFFECTIVE_DT
+--ORDER BY PAT_ENC_CSN_ID, EFFECTIVE_DT
+
+--SELECT DISTINCT
+--	PAT_ENC_CSN_ID
+--   ,RECORD_NAME
+--FROM #adt2
+--WHERE EVENT_COUNT = 1
+--ORDER BY PAT_ENC_CSN_ID
+
+SELECT
+    adt2.PAT_ENC_CSN_ID,
+	EVENT_ID,
+    EFFECTIVE_TIME,
+    EFFECTIVE_DT,
+	ASSIGNED_DT,
+    LST_AUDIT_ID,
+    SVC_REMOVED,
+    LST_AUDIT_ACTION,
+    ACUTE_FLAG,
+    EVENT_COUNT,
+    EVENT_TYPE,
+    PAT_CLASS,
+    PAT_MRN_ID,
+    adt2.PAT_ID,
+    PAT_NAME,
+    DEPARTMENT_ID,
+    DEPARTMENT_NAME,
+    ROOM_ID,
+    BED_ID,
+    RECORD_NAME,
+	--hap.PAT_ID,
+    --hap.PAT_ENC_DATE_REAL,
+    --hap.LINE,
+ --   hap.ATTEND_FROM_DATE,
+ --   hap.ATTEND_TO_DATE,
+	--DATEDIFF(MINUTE, hap.ATTEND_FROM_DATE, hap.ATTEND_TO_DATE) AS ATTEND_PROV_LOS,
+	--CAST(CAST(DATEDIFF(MINUTE,hap.ATTEND_FROM_DATE,hap.ATTEND_TO_DATE) AS NUMERIC(10,3)) / 1440.0 AS NUMERIC(7,2)) AS ATTEND_PROV_LOS_Days,
+    hap.PROV_ID,
+	ser.PROV_NAME,
+    hap.ED_ATTEND_YN--,
+    --hap.CM_CT_OWNER_ID,
+    --hap.PAT_ENC_CSN_ID
+
+INTO  #census
+
+FROM #adt2 adt2
+CROSS JOIN
+(
+SELECT
+	PAT_ID,
+    PAT_ENC_DATE_REAL,
+    LINE,
+    ATTEND_FROM_DATE,
+    ATTEND_TO_DATE,
+    PROV_ID,
+    ED_ATTEND_YN,
+    CM_CT_OWNER_ID,
+    PAT_ENC_CSN_ID
+FROM CLARITY..HSP_ATND_PROV
+) hap
+INNER JOIN
+(
+SELECT DISTINCT
+	PROV_ID
+   ,PROV_NAME
+FROM CLARITY..CLARITY_SER
+WHERE
+(PROV_ID IN
+(
+ '105151' -- FLANNAGAN, MOLLY A
+,'126209' -- TSUNG, ALLAN
+,'130914' -- LEVINSKY JR, NICK C
+,'30272' -- HALLOWELL, PETER
+,'30284' -- YOUNG, JEFFREY SETH
+,'30317' -- SCHIRMER, BRUCE
+,'30332' -- BAUER, TODD W
+,'30344' -- CALLAND, JAMES F
+,'34027' -- TACHE-LEON, CARLOS
+,'45837' -- DAVIS, JOHN P
+,'46621' -- SMITH, PHILIP W
+,'46748' -- YANG, ZEQUAN
+,'51087' -- WILLIAMS, MICHAEL D
+,'56357' -- FASHANDI, ANNA Z
+,'57158' -- ZAYDFUDIM, VICTOR M
+)
+)
+) ser
+ON hap.PROV_ID = ser.PROV_ID
+WHERE adt2.EVENT_COUNT = 1
+AND adt2.PAT_ENC_CSN_ID = hap.PAT_ENC_CSN_ID
+AND (adt2.EFFECTIVE_TIME BETWEEN hap.ATTEND_FROM_DATE AND DATEADD(MINUTE, -1, hap.ATTEND_TO_DATE))
+
+--SELECT
+--       RECORD_NAME,
+--       PROV_NAME,
+--	   PAT_ENC_CSN_ID,
+--       EFFECTIVE_TIME,
+--       EFFECTIVE_DT,
+--       EVENT_ID,
+--       ASSIGNED_DT,
+--       LST_AUDIT_ID,
+--       SVC_REMOVED,
+--       LST_AUDIT_ACTION,
+--       ACUTE_FLAG,
+--       EVENT_COUNT,
+--       EVENT_TYPE,
+--       PAT_CLASS,
+--       PAT_MRN_ID,
+--       PAT_ID,
+--       PAT_NAME,
+--       DEPARTMENT_ID,
+--       DEPARTMENT_NAME,
+--       ROOM_ID,
+--       BED_ID,
+--       --LINE,
+--       --ATTEND_FROM_DATE,
+--       --ATTEND_TO_DATE,
+--       --ATTEND_PROV_LOS,
+--       --ATTEND_PROV_LOS_Days,
+--       PROV_ID,
+--       ED_ATTEND_YN
+--FROM #census
+
+--SELECT *
+--FROM #census
+----ORDER BY PAT_ENC_CSN_ID, EFFECTIVE_DT
+----ORDER BY RECORD_NAME, PROV_NAME, PAT_ENC_CSN_ID, DEPARTMENT_NAME, EFFECTIVE_DT
+--ORDER BY RECORD_NAME, PROV_NAME, PAT_ENC_CSN_ID, EFFECTIVE_DT
+
+SELECT
+	RECORD_NAME AS Provider_Team
+   ,EFFECTIVE_DT AS Census_Date
+   ,DEPARTMENT_NAME AS Department_Name
+   ,PROV_NAME AS Provider_Name
+   ,COUNT(*) AS Midnight_Census
+FROM #census
+GROUP BY
+	RECORD_NAME
+   ,EFFECTIVE_DT
+   ,DEPARTMENT_NAME
+   ,PROV_NAME
+--ORDER BY PAT_ENC_CSN_ID, EFFECTIVE_DT
+--ORDER BY RECORD_NAME, PROV_NAME, PAT_ENC_CSN_ID, DEPARTMENT_NAME, EFFECTIVE_DT
+--ORDER BY RECORD_NAME, PROV_NAME, PAT_ENC_CSN_ID, EFFECTIVE_DT
+ORDER BY
+	RECORD_NAME
+   ,EFFECTIVE_DT
+   ,DEPARTMENT_NAME
+   ,PROV_NAME
+
+SELECT
+    hap.PAT_ENC_CSN_ID
+   ,hap.PROV_ID
+   ,ser.PROV_NAME
+   --,provteam.RECORD_NAME
+   ,CASE WHEN hap.PROV_ID = '46748' AND ATTEND_TO_DATE <= '12/1/2022' THEN  'EGS Team' ELSE provteam.RECORD_NAME END AS RECORD_NAME -- YANG, ZEQUAN
+   ,LINE
+   ,ATTEND_FROM_DATE
+   ,ATTEND_TO_DATE
+   ,hsp.HOSP_ADMSN_DATE
+   ,hsp.HOSP_DISCH_DATE
+   ,DATEDIFF(MINUTE, ATTEND_FROM_DATE, ATTEND_TO_DATE) AS ATTEND_PROV_LOS
+   ,CAST(CAST(DATEDIFF(MINUTE,ATTEND_FROM_DATE,ATTEND_TO_DATE) AS NUMERIC(10,3)) / 1440.0 AS NUMERIC(7,2)) AS ATTEND_PROV_LOS_Days
+
+INTO #los
+
+FROM CLARITY..HSP_ATND_PROV hap
+INNER JOIN #pats pats
+	ON hap.PAT_ID = pats.PAT_ID AND hap.PAT_ENC_CSN_ID = pats.PAT_ENC_CSN_ID
+INNER JOIN
+(
+SELECT DISTINCT
+	PROV_ID
+   ,PROV_NAME
+FROM CLARITY..CLARITY_SER
+WHERE
+(PROV_ID IN
+(
+ '105151' -- FLANNAGAN, MOLLY A
+,'126209' -- TSUNG, ALLAN
+,'130914' -- LEVINSKY JR, NICK C
+,'30272' -- HALLOWELL, PETER
+,'30284' -- YOUNG, JEFFREY SETH
+,'30317' -- SCHIRMER, BRUCE
+,'30332' -- BAUER, TODD W
+,'30344' -- CALLAND, JAMES F
+,'34027' -- TACHE-LEON, CARLOS
+,'45837' -- DAVIS, JOHN P
+,'46621' -- SMITH, PHILIP W
+,'46748' -- YANG, ZEQUAN
+,'51087' -- WILLIAMS, MICHAEL D
+,'56357' -- FASHANDI, ANNA Z
+,'57158' -- ZAYDFUDIM, VICTOR M
+)
+)
+) ser
+ON hap.PROV_ID = ser.PROV_ID
+LEFT OUTER JOIN @PROVTEAM provteam
+ON provteam.PROV_ID = ser.PROV_ID
+--INNER JOIN
+LEFT OUTER JOIN
+(
+SELECT DISTINCT
+	PAT_ENC_CSN_ID
+	,CAST(HOSP_ADMSN_TIME AS DATE) AS HOSP_ADMSN_DATE
+	,CAST(HOSP_DISCH_TIME AS DATE) AS HOSP_DISCH_DATE
+FROM CLARITY..PAT_ENC_HSP
+) hsp
+ON hap.PAT_ENC_CSN_ID = hsp.PAT_ENC_CSN_ID
+
+--SELECT *
+--FROM #los
+--WHERE ATTEND_PROV_LOS IS NOT NULL
+----ORDER BY PAT_ENC_CSN_ID, PROV_ID, LINE
+----ORDER BY HOSP_DISCH_DATE, PAT_ENC_CSN_ID, PROV_ID, LINE
+--ORDER BY HOSP_ADMSN_DATE, PAT_ENC_CSN_ID, PROV_ID, LINE
+
+SELECT
+	los.RECORD_NAME AS Provider_Team,
+	los.PAT_ENC_CSN_ID AS Encounter_CSN,
+    los.HOSP_ADMSN_DATE AS Encounter_Admsn_Date,
+    los.HOSP_DISCH_DATE AS Encounter_Disch_Date,
+    los.PROV_NAME AS Provider_Name,
+    los.ATTEND_PROV_LOS AS Patient_LOS_for_Provider,
+    los.ATTEND_PROV_LOS_Days AS Patient_LOS_Days_for_Provider
+FROM
+(
+SELECT
+    RECORD_NAME
+   ,PAT_ENC_CSN_ID
+   ,HOSP_ADMSN_DATE
+   ,HOSP_DISCH_DATE
+   --,PROV_ID
+   ,PROV_NAME
+   ,SUM(ATTEND_PROV_LOS) AS ATTEND_PROV_LOS
+   ,SUM(ATTEND_PROV_LOS_Days) AS ATTEND_PROV_LOS_Days
+FROM #los
+WHERE ATTEND_PROV_LOS IS NOT NULL
+--GROUP BY
+--	PAT_ENC_CSN_ID
+--   ,PROV_ID
+--GROUP BY
+--    RECORD_NAME
+--   ,PAT_ENC_CSN_ID
+--   ,PROV_ID
+GROUP BY
+    RECORD_NAME
+   ,PAT_ENC_CSN_ID
+   ,HOSP_ADMSN_DATE
+   ,HOSP_DISCH_DATE
+   ,PROV_NAME
+) los
+--ORDER BY PAT_ENC_CSN_ID, PROV_ID
+--ORDER BY los.RECORD_NAME, los.HOSP_DISCH_DATE, los.PROV_NAME
+--ORDER BY los.RECORD_NAME, los.HOSP_ADMSN_DATE, los.PROV_NAME
+ORDER BY los.RECORD_NAME, los.PAT_ENC_CSN_ID, los.HOSP_ADMSN_DATE, los.PROV_NAME
+
+/*
+SELECT
+	RECORD_NAME
+   ,PROV_NAME
+   ,PAT_ENC_CSN_ID
+   ,COUNT(*) AS Midnight_Census
+   ,MAX(ATTEND_PROV_LOS_Days) AS LOS_Days
+FROM #metrics
+GROUP BY
+	RECORD_NAME
+   ,PROV_NAME
+   ,PAT_ENC_CSN_ID
+*/
+/*
+SELECT hap.PAT_ENC_CSN_ID
+              ,LINE
+              ,PROV_ID
+              ,ATTEND_FROM_DATE
+              ,ATTEND_TO_DATE
+              ,DATEDIFF(MINUTE, ATTEND_FROM_DATE, ATTEND_TO_DATE) AS ATTEND_PROV_LOS
+FROM CLARITY..HSP_ATND_PROV hap
+INNER JOIN
+(
+SELECT DISTINCT
+	PAT_ENC_CSN_ID
+FROM #adt2
+WHERE LST_AUDIT_ID IN (69,72,73,190)
+) census
+ON hap.PAT_ENC_CSN_ID = census.PAT_ENC_CSN_ID
+ORDER BY PAT_ENC_CSN_ID, hap.LINE
+*/
+
+DROP TABLE IF EXISTS #pats;
+DROP TABLE IF EXISTS #adt;
+DROP TABLE IF EXISTS #audit_day;
+DROP TABLE IF EXISTS #audit_day2;
+DROP TABLE IF EXISTS #audit_day3;
+DROP TABLE IF EXISTS #adt2;
+DROP TABLE IF EXISTS #census;
+DROP TABLE IF EXISTS #los;
+
+
+	

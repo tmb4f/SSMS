@@ -636,8 +636,11 @@ IF @Manual IS NULL
 ELSE
 	SELECT * FROM #RptgTemp
 	--ORDER BY sk_Fact_Pt_Enc_Clrt
-	ORDER BY sk_Adm_Dte
-	       , sk_Dsch_Dte
+	--ORDER BY sk_Adm_Dte
+	--       , sk_Dsch_Dte
+	--	   , sk_Fact_Pt_Enc_Clrt
+	ORDER BY adm_date_time
+	       , dsch_date_time
 		   , sk_Fact_Pt_Enc_Clrt
 
 GO

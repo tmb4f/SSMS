@@ -159,6 +159,27 @@ CREATE TABLE Clarity_App_Dev.dbo.ADT_GPP_Encounters
 IF OBJECT_ID('tempdb..#GPP ') IS NOT NULL
 DROP TABLE #GPP
 
+--SELECT
+--    hsp.PAT_ENC_CSN_ID
+--	,hsp.PAT_ID 'Pat_ID'
+--	,hsp.VISIT_PROV_ID 'Prov_ID'
+--	--,MAX(tid.DONOR_UNOS_ID) 'DONOR_UNOS_ID'
+--	--,MAX(tid.TXP_DNR_STATUS) 'TXP_DNR_STATUS'
+--	,hsp.PAT_ENC_DATE_REAL 'Cntc_Dt'
+--	,hsp.CONTACT_DATE
+--	,hsp.APPT_STATUS_C
+
+--FROM  CLARITY.dbo.PAT_ENC hsp		--ON hsp.PAT_ENC_CSN_ID = enc.PAT_ENC_CSN_ID
+--LEFT OUTER JOIN CLARITY.dbo.PATIENT patient
+--ON patient.PAT_ID = hsp.PAT_ID
+--WHERE 
+--((hsp.CONTACT_DATE >=@StartDate		AND		hsp.CONTACT_DATE<@EndDate)
+--				OR 
+--				(hsp.HOSP_ADMSN_TIME  >=@StartDate	AND		hsp.HOSP_ADMSN_TIME <@EndDate))
+--				--AND hsp.APPT_STATUS_C IN ('2','6') --ONLY COMPLETED/ARRIVED STATUS
+--				AND hsp.PAT_ID = 'Z3115045'
+--ORDER BY hsp.PAT_ENC_CSN_ID
+
 /*******QUERY TO GET LAST ENCOUNTER*********************/
 ;WITH Lenc_cte AS 
 (
@@ -193,11 +214,14 @@ WHERE
 (hsp.CONTACT_DATE >=@StartDate		AND		hsp.CONTACT_DATE<@EndDate)
 				OR 
 				(hsp.HOSP_ADMSN_TIME  >=@StartDate	AND		hsp.HOSP_ADMSN_TIME <@EndDate)
-				AND hsp.APPT_STATUS_C IN ('2','6') --ONLY COMPLETED/ARRIVED STATUS 
+				--AND hsp.APPT_STATUS_C IN ('2','6') --ONLY COMPLETED/ARRIVED STATUS 
 
 GROUP BY hsp.PAT_ID,hsp.VISIT_PROV_ID
 )
 /**********************************************/
+--SELECT *
+--FROM Lenc_cte
+--WHERE Lenc_cte.PAT_ID = 'Z3115045'
 
 /******Atn_Dr_Last_Update_Dt************/
 
@@ -218,15 +242,22 @@ SELECT
 	,enc.VISIT_PROV_ID 'Prov_ID'
 	,enc.ACCOUNT_ID 'Guar_ID'
 	,enc.ENC_TYPE_C
+	,enct.NAME AS ENC_TYPE_NAME
+	,enc.APPT_STATUS_C
 FROM Lenc_cte
 	INNER JOIN CLARITY.dbo.PAT_ENC enc		ON enc.PAT_ID = Lenc_cte.Pat_ID
 										AND enc.VISIT_PROV_ID=Lenc_cte.Prov_ID
  										AND Lenc_cte.Cntc_Dt=enc.PAT_ENC_DATE_REAL
-WHERE enc.APPT_STATUS_C IN ('2','6') --ONLY COMPLETED/ARRIVED STATUS 
+	LEFT OUTER JOIN CLARITY.dbo.ZC_DISP_ENC_TYPE enct
+	ON enct.DISP_ENC_TYPE_C = enc.ENC_TYPE_C
+--WHERE enc.APPT_STATUS_C IN ('2','6') --ONLY COMPLETED/ARRIVED STATUS 
 )
 /************************************************************/
-
-
+SELECT *
+FROM lst_cte
+WHERE lst_cte.PAT_ID = 'Z3115045'
+ORDER BY lst_cte.Adm_Dt
+/*
 --INSERT INTO [Clarity_App_Dev].[dbo].[ADT_GPP_Encounters]
 SELECT DISTINCT  --without distinct, results multiple rows becasue diagnosis code in multiple line
 	--lst_cte.Hsp_Acct  'Acct'
@@ -344,6 +375,8 @@ SELECT DISTINCT  --without distinct, results multiple rows becasue diagnosis cod
 	,GETDATE() 'Load_Date_Time'
 	--,lst_cte.DONOR_UNOS_ID
 	--,lst_cte.TXP_DNR_STATUS
+	,lst_cte.Hsp_Acct
+	,lst_cte.Guar_ID
 
 INTO #GPP
 
@@ -427,13 +460,14 @@ WHERE ser.PROV_TYPE <>'Resource'
 			
 				AND rd.Acc_ID IS NULL --not in red folder extract
 			
-SELECT DISTINCT
-    gpp.PAT_ID
-   ,Pt_LName
-   ,Pt_FName_MI
-   ,GUAR_FName
-   ,GUAR_MName
-   ,GUAR_LName
+SELECT *
+--SELECT DISTINCT
+   -- gpp.PAT_ID
+   --,Pt_LName
+   --,Pt_FName_MI
+   --,GUAR_FName
+   --,GUAR_MName
+   --,GUAR_LName
    --,Adm_Dt
    --,DONOR_UNOS_ID
    --,TXP_DNR_STATUS
@@ -456,15 +490,20 @@ FROM #GPP gpp
 --WHERE Pt_LName LIKE '%LIVER%'
 --OR Pt_LName LIKE '%DONOR%'
 --OR GUAR_LName LIKE '%Donor%'
-WHERE GUAR_LName LIKE '%Donor%'
+--WHERE GUAR_LName LIKE '%Donor%'
+--WHERE gpp.Atn_Dr = '66744'
+--WHERE gpp.Atn_Dr_LName = 'DALRYMPLE'
+WHERE gpp.PAT_ID = 'Z3057053'
 
 --ORDER BY	Pt_LName
 --ORDER BY	GUAR_FName
 --ORDER BY	gpp.PAT_ID
 --          , gpp.Adm_Dt
-ORDER BY	gpp.PAT_ID
+--ORDER BY	gpp.PAT_ID
+ORDER BY	gpp.Adm_Dt
+--ORDER BY	gpp.Atn_Dr_LName, gpp.Atn_Dr_FName, gpp.Atn_Dr_MI, gpp.Adm_Dt
 /****************************************************************************************/
-
+*/
 GO
 
 

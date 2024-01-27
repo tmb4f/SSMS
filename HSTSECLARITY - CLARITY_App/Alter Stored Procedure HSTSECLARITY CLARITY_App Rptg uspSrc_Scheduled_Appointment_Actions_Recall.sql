@@ -25,15 +25,22 @@ WHY : Recall appointment action report
 ----------------------------------------------------------------------------------------------------------------------------------------
 INFO:
       INPUTS:   CLARITY_App.ETL.fn_ParmParse
-				CLARITY.dbo.CL_SSA
-				CLARITY.dbo.CLARITY_DEP
-				CLARITY_App.Rptg.vwRef_MDM_Location_Master_EpicSvc
+				       CLARITY..CL_SSA
+				       CLARITY..CL_SSA_PROV_DEPT
+				       CLARITY..CLARITY_DEP
+				       CLARITY_App.Rptg.vwRef_MDM_Location_Master_EpicSvc
+					   CLARITY..V_SCHED_APPT
+				       CLARITY_App.Rptg.vwDim_Date
+				       CLARITY..PATIENT
+				       CLARITY..CL_SSA_RECALL_HX
+				       CLARITY..CLARITY_EMP
 
       OUTPUTS:
                 CLARITY_App.Rptg.uspSrc_Scheduled_Appointment_Actions_Recall
 ----------------------------------------------------------------------------------------------------------------------------------------
 MODS:     06/18/2019--TMB-- Create new stored procedure
-          07/31/2019--TMB-- Edit grouper column logic
+                 07/31/2019--TMB-- Edit grouper column logic
+				 03/22/2021--TMB-- Add previous completed appointment date, next scheduled appointment date
 *****************************************************************************************************************************************/
 
   SET NOCOUNT ON;
@@ -64,10 +71,18 @@ DECLARE @locstartdate SMALLDATETIME,
 SET @locstartdate = @StartDate
 SET @locenddate   = @EndDate
 
-DECLARE @SelectString NVARCHAR(4000),
-		@ParmDefinition NVARCHAR(500)
+DECLARE @InsertIntoString NVARCHAR(4000),
+                  @SelectString NVARCHAR(MAX),
+		          @ParmDefinition NVARCHAR(500)
 
-SET @SelectString = N';WITH cte_pods_servLine (pod_Service_Line)
+IF OBJECT_ID('tempdb..#RecallDepartment') IS NOT NULL DROP TABLE tempdb..#RecallDepartment
+CREATE TABLE #RecallDepartment (DepartmentId NUMERIC(18,0), PatId VARCHAR(18), ApptStatus INTEGER, ContactDate DATETIME, NextSeq INTEGER, PrevSeq INTEGER)
+
+SET @InsertIntoString = N';WITH cte_pods_servLine (pod_Service_Line) AS (SELECT Param FROM ETL.fn_ParmParse(@PodServiceLine, '','')), cte_depid (DepartmentId) AS (SELECT Param FROM ETL.fn_ParmParse(@DepartmentId, '','')) INSERT INTO #RecallDepartment SELECT DISTINCT mdm.epic_department_id AS DepartmentId, ssa.PAT_ID AS PatId, appt.APPT_STATUS_C AS ApptStatus, appt.CONTACT_DATE AS ContactDate, appt.Next_Seq AS NextSeq, appt.Prev_Seq AS PrevSeq FROM CLARITY..[CL_SSA] ssa INNER JOIN CLARITY..[CL_SSA_PROV_DEPT] pd ON ssa.ACTION_ID = pd.ACTION_ID LEFT OUTER JOIN CLARITY..CLARITY_DEP dep ON dep.DEPARTMENT_ID = pd.DEP_ID LEFT OUTER JOIN CLARITY_App.Rptg.vwRef_MDM_Location_Master_EpicSvc mdm ON pd.DEP_ID = mdm.epic_department_id LEFT OUTER JOIN (SELECT [DEPARTMENT_ID], [PAT_ID], [APPT_STATUS_C], [CONTACT_DATE], ROW_NUMBER() OVER (PARTITION BY PAT_ID, DEPARTMENT_ID, APPT_STATUS_C ORDER BY CONTACT_DATE ASC) AS Next_Seq, ROW_NUMBER() OVER (PARTITION BY PAT_ID, DEPARTMENT_ID, APPT_STATUS_C ORDER BY CONTACT_DATE DESC) AS Prev_Seq FROM [CLARITY]..[V_SCHED_APPT] WHERE ((APPT_STATUS_C = 2 AND CONTACT_DATE <= CAST(GETDATE() AS DATE)) OR (APPT_STATUS_C = 1 AND CONTACT_DATE >= CAST(GETDATE() AS DATE)))) appt ON appt.DEPARTMENT_ID = dep.DEPARTMENT_ID AND appt.PAT_ID = ssa.PAT_ID WHERE 1=1 AND mdm.epic_department_id IS NOT NULL AND (appt.Next_Seq IS NULL OR appt.Next_Seq = 1) AND (appt.Prev_Seq IS NULL OR appt.Prev_Seq = 1) AND (ssa.RECALL_DT >= @RecallStartDate AND ssa.RECALL_DT <= @RecallEndDate) AND COALESCE(' + @DepartmentGrouperColumn + ',''' + @DepartmentGrouperNoValue + ''') IN (SELECT pod_Service_Line FROM cte_pods_servLine)  AND (pd.DEP_ID IN (SELECT DepartmentId FROM cte_depid)) ORDER BY DepartmentId, PatId';
+SET @ParmDefinition = N'@RecallStartDate SMALLDATETIME, @RecallEndDate SMALLDATETIME, @PodServiceLine VARCHAR(MAX), @DepartmentId VARCHAR(MAX)';
+EXECUTE sp_executesql @InsertIntoString, @ParmDefinition, @RecallStartDate=@locstartdate, @RecallEndDate=@locenddate, @PodServiceLine=@in_pods_servLine, @DepartmentId=@in_depid;
+
+SET @SelectString = ';WITH cte_pods_servLine (pod_Service_Line)
 AS
 (
 SELECT Param FROM CLARITY_App.ETL.fn_ParmParse(@PodServiceLine, '','')
@@ -101,7 +116,9 @@ SELECT CAST(''Recall Action'' AS VARCHAR(50)) AS event_type,
 	   evnts.RECALL_NOTIF_DATE,
 	   evnts.REC_STAT_HX_INST,
 	   evnts.REC_STAT_HX_EMP_NAME,
-	   evnts.LINE
+	   evnts.LINE,
+	   evnts.NextScheduledAppt,
+	   evnts.PrevCompletedAppt
 
 FROM
 (
@@ -128,6 +145,8 @@ FROM
 		  ,mdm.service_line
 		  ,mdm.POD_ID
 		  ,mdm.PFA_POD
+		  ,next.NextScheduledAppt
+		  ,prev.PrevCompletedAppt
     FROM CLARITY.[dbo].[CL_SSA] ssa
     LEFT OUTER JOIN
     (
@@ -169,6 +188,10 @@ FROM
     ON ssapd.ACTION_ID = ssa.ACTION_ID
     LEFT OUTER JOIN CLARITY_App.Rptg.vwRef_MDM_Location_Master_EpicSvc mdm
     ON ssapd.DEP_ID = mdm.epic_department_id
+	LEFT OUTER JOIN (SELECT DepartmentId, PatId, ContactDate AS NextScheduledAppt FROM #RecallDepartment WHERE ApptStatus = 1) next
+	ON (next.DepartmentId = ssapd.DEP_ID) AND (next.PatId = ssa.PAT_ID)
+	LEFT OUTER JOIN (SELECT DepartmentId, PatId, ContactDate AS PrevCompletedAppt FROM #RecallDepartment WHERE ApptStatus = 2) prev
+	ON (prev.DepartmentId = ssapd.DEP_ID) AND (prev.PatId = ssa.PAT_ID)
 ) evnts
 
 WHERE (evnts.RECALL_DT >= @RecallStartDate

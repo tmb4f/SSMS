@@ -1,0 +1,81 @@
+USE DS_HSDW_Stage
+/*
+SELECT DISTINCT
+	   [SERVICE]
+  FROM [PressGaney].[PG_Responses_xmlrip_OAS_CAHPS]
+  ORDER BY SERVICE
+*/
+/*
+SELECT DISTINCT
+       [SURVEY_ID]
+      ,[RECDATE]
+      ,[VALUE]
+  FROM [PressGaney].[PG_Responses_xmlrip_OAS_CAHPS] resp
+  LEFT OUTER JOIN DS_HSDW_Prod.dbo.Dim_PG_Question qust
+  ON qust.VARNAME = resp.VARNAME
+  WHERE SERVICE = 'MD'
+  AND RECDATE >= '6/1/2023 00:00' AND RECDATE <= '6/30/2023 23:59'
+  AND resp.RESP_CAT = 'ANALYSIS'
+  AND qust.sk_Dim_PG_Question = 1333
+  ORDER BY RECDATE, SURVEY_ID
+ */
+
+SELECT DISTINCT
+       [SURVEY_ID]
+      ,[CLIENT_ID]
+  FROM [PressGaney].[PG_Responses_xmlrip_OAS_CAHPS] resp
+  LEFT OUTER JOIN DS_HSDW_Prod.dbo.Dim_PG_Question qust
+  ON qust.VARNAME = resp.VARNAME
+  WHERE SERVICE = 'MD'
+  --AND RECDATE >= '7/1/2023 00:00'
+  AND RECDATE >= '6/1/2023 00:00' AND RECDATE <= '6/30/2023 23:59'
+  --AND resp.RESP_CAT = 'ANALYSIS'
+  AND qust.sk_Dim_PG_Question = 1333
+  AND resp.SURVEY_ID IN (
+  4955315297
+,4955318520
+,5029645573
+,5099706732
+,5099708777
+,5099710076
+,5099711070
+,5099711263
+,5099711273
+,5099714981
+,5105241099)
+  --ORDER BY RECDATE, SURVEY_ID
+  ORDER BY resp.SURVEY_ID
+
+SELECT [SURVEY_ID]
+      ,[CLIENT_ID]
+      ,[SERVICE]
+      ,[RECDATE]
+      ,[DISDATE]
+      ,[RESP_CAT]
+      ,resp.[VARNAME]
+	  ,qust.sk_Dim_PG_Question
+      ,[VALUE]
+      ,[filename]
+      ,resp.[Load_Dtm]
+  FROM [PressGaney].[PG_Responses_xmlrip_OAS_CAHPS] resp
+  LEFT OUTER JOIN DS_HSDW_Prod.dbo.Dim_PG_Question qust
+  ON qust.VARNAME = resp.VARNAME
+  WHERE SERVICE = 'MD'
+  --AND RECDATE >= '7/1/2023 00:00'
+  AND RECDATE >= '6/1/2023 00:00' AND RECDATE <= '6/30/2023 23:59'
+  --AND resp.RESP_CAT = 'ANALYSIS'
+  AND qust.sk_Dim_PG_Question = 1333
+  AND resp.SURVEY_ID IN (
+  4955315297
+,4955318520
+,5029645573
+,5099706732
+,5099708777
+,5099710076
+,5099711070
+,5099711263
+,5099711273
+,5099714981
+,5105241099)
+  --ORDER BY RECDATE, SURVEY_ID
+  ORDER BY resp.SURVEY_ID, resp.Load_Dtm
